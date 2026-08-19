@@ -227,6 +227,12 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 .edit-panel-title{font-size:.88rem;font-weight:800;color:var(--pk);margin-bottom:9px;}
 .edit-word-list{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;}
 .edit-word-row{display:flex;gap:5px;align-items:center;}
+.new-word-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:9px;}
+.new-word-row{display:flex;gap:6px;}
+.new-word-row input{flex:1;padding:8px 12px;border:2px solid var(--border);border-radius:10px;font-size:.92rem;font-family:inherit;outline:none;transition:border-color .15s;background:#fff;color:var(--text);}
+.new-word-row input:focus{border-color:var(--pk);box-shadow:0 0 0 3px rgba(255,143,171,.15);}
+.new-word-grid-header{display:flex;gap:6px;margin-bottom:5px;}
+.new-word-grid-header span{flex:1;font-size:.78rem;color:var(--muted);font-weight:800;}
 .edit-word-row input{flex:1;padding:7px 11px;border:2px solid var(--border);border-radius:9px;font-size:.9rem;font-family:inherit;outline:none;}
 .edit-word-row input:focus{border-color:var(--pk);}
 .edit-word-row .meaning-input{max-width:120px;}
@@ -594,14 +600,20 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       </div>
       <div id="koWordInputs">
         <div class="form-group">
-          <label>단어 목록 (한 줄에 하나씩)</label>
-          <textarea id="koWordList" rows="4" placeholder="사과&#10;바나나&#10;포도"></textarea>
+          <label>단어 목록 <span style="font-weight:600;color:var(--muted);">(Enter: 다음 줄 · Tab: 다음 칸)</span></label>
+          <div class="new-word-grid" id="koNewWordGrid"></div>
+          <button type="button" class="add-word-btn" onclick="addNewWordRow('ko',true)">＋ 줄 추가</button>
         </div>
       </div>
       <div id="enWordInputs" style="display:none">
         <div class="form-group">
-          <label>영어 단어 + 한글 뜻 (쉼표로 구분)</label>
-          <textarea id="enWordList" rows="4" placeholder="apple, 사과&#10;banana, 바나나"></textarea>
+          <label>영어 단어 / 한글 뜻 <span style="font-weight:600;color:var(--muted);">(Enter: 다음 줄 · Tab: 다음 칸)</span></label>
+          <div class="new-word-grid-header">
+            <span>🇺🇸 영어 단어</span>
+            <span>🇰🇷 한글 뜻</span>
+          </div>
+          <div class="new-word-grid" id="enNewWordGrid"></div>
+          <button type="button" class="add-word-btn" onclick="addNewWordRow('en',true)">＋ 줄 추가</button>
         </div>
       </div>
       <button class="btn btn-primary" onclick="addWordSet()">＋ 세트 추가</button>
@@ -716,15 +728,14 @@ const ADMIN_PW='1234';
    🔥 Firebase 설정
 ══════════════════════════════════════ */
 const firebaseConfig = {
-  apiKey: "AIzaSyBb4peVQMMATpJPx-FBkV0Hj-Les0l0I_g",
-  authDomain: "growvine-typing-3861c.firebaseapp.com",
-  databaseURL: "https://growvine-typing-3861c-default-rtdb.firebaseio.com",
-  projectId: "growvine-typing-3861c",
-  storageBucket: "growvine-typing-3861c.firebasestorage.app",
-  messagingSenderId: "889218127297",
-  appId: "1:889218127297:web:39dc26ba6f04dce243cb40"
+  apiKey: "AIzaSyCYwf_ofk44T7RkIxeudlVpLZX2wptEkV0",
+  authDomain: "growvine-typing.firebaseapp.com",
+  databaseURL: "https://growvine-typing-default-rtdb.firebaseio.com",
+  projectId: "growvine-typing",
+  storageBucket: "growvine-typing.firebasestorage.app",
+  messagingSenderId: "270361921671",
+  appId: "1:270361921671:web:98c90bc9e569e08b06d022"
 };
-
 let db = null;
 let firebaseReady = false;
 try{
@@ -1073,22 +1084,84 @@ function updateStats(){
 let adminLang='ko';
 function openAdmin(){document.getElementById('adminPwInput').value='';document.getElementById('adminPwError').textContent='';document.getElementById('adminModal').classList.add('show');setTimeout(()=>document.getElementById('adminPwInput').focus(),100);}
 document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
-function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
+function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
 function closeAdminModal(){document.getElementById('adminModal').classList.remove('show');}
 function setAdminLang(lang,btn){
   adminLang=lang;document.querySelectorAll('.lang-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
   document.getElementById('koWordInputs').style.display=lang==='ko'?'':'none';
   document.getElementById('enWordInputs').style.display=lang==='en'?'':'none';
 }
+
+/* ══════════════════════════════════════
+   ★ 새 세트 추가 — 칸 단위 입력 (Enter: 아래로, Tab: 옆으로) ★
+══════════════════════════════════════ */
+function createNewWordRow(lang, idx){
+  const row=document.createElement('div');row.className='new-word-row';
+  if(lang==='ko'){
+    row.innerHTML=`<input type="text" placeholder="단어" data-lang="ko" data-col="0" data-row="${idx}">`;
+  }else{
+    row.innerHTML=`<input type="text" placeholder="영어 단어" data-lang="en" data-col="0" data-row="${idx}"><input type="text" placeholder="한글 뜻" data-lang="en" data-col="1" data-row="${idx}">`;
+  }
+  return row;
+}
+function addNewWordRow(lang, focus){
+  const grid=document.getElementById(lang==='ko'?'koNewWordGrid':'enNewWordGrid');
+  const idx=grid.children.length;
+  const row=createNewWordRow(lang, idx);
+  grid.appendChild(row);
+  attachNewWordRowHandlers(row, lang);
+  if(focus){
+    const firstInput=row.querySelector('input');
+    if(firstInput) firstInput.focus();
+  }
+  return row;
+}
+function attachNewWordRowHandlers(row, lang){
+  row.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('keydown', e=>{
+      if(e.key!=='Enter') return;
+      e.preventDefault();
+      const grid=document.getElementById(lang==='ko'?'koNewWordGrid':'enNewWordGrid');
+      const curRow=Number(inp.dataset.row);
+      const col=Number(inp.dataset.col);
+      const nextRow=curRow+1;
+      let target=grid.querySelector(`input[data-row="${nextRow}"][data-col="${col}"]`);
+      if(!target){
+        const newRow=addNewWordRow(lang,false);
+        target=newRow.querySelector(`input[data-col="${col}"]`);
+      }
+      if(target) target.focus();
+    });
+  });
+}
+function resetNewWordGrids(){
+  const koGrid=document.getElementById('koNewWordGrid');
+  const enGrid=document.getElementById('enNewWordGrid');
+  if(koGrid) koGrid.innerHTML='';
+  if(enGrid) enGrid.innerHTML='';
+  addNewWordRow('ko', false);
+  addNewWordRow('en', false);
+}
 function addWordSet(){
   const name=document.getElementById('adminSetName').value.trim();
   if(!name){alert('세트 이름을 입력하세요!');return;}
   let words=[];
-  if(adminLang==='ko'){const raw=document.getElementById('koWordList').value.trim();if(!raw){alert('단어를 입력하세요!');return;}words=raw.split('\n').map(w=>w.trim()).filter(Boolean).map(w=>({text:w}));}
-  else{const raw=document.getElementById('enWordList').value.trim();if(!raw){alert('단어를 입력하세요!');return;}words=raw.split('\n').map(line=>{const[en,ko]=line.split(',').map(s=>s.trim());return{text:en||'',meaning:ko||''};}).filter(w=>w.text);}
-  if(!words.length){alert('유효한 단어가 없습니다!');return;}
+  if(adminLang==='ko'){
+    const inputs=[...document.querySelectorAll('#koNewWordGrid input')];
+    words=inputs.map(i=>i.value.trim()).filter(Boolean).map(w=>({text:w}));
+  }else{
+    const rows=[...document.getElementById('enNewWordGrid').children];
+    words=rows.map(row=>{
+      const ins=row.querySelectorAll('input');
+      const en=(ins[0]?.value||'').trim();
+      const ko=(ins[1]?.value||'').trim();
+      return {text:en, meaning:ko};
+    }).filter(w=>w.text);
+  }
+  if(!words.length){alert('단어를 입력하세요!');return;}
   wordSets.push({name,lang:adminLang,words});saveWordSets();
-  document.getElementById('adminSetName').value='';document.getElementById('koWordList').value='';document.getElementById('enWordList').value='';
+  document.getElementById('adminSetName').value='';
+  resetNewWordGrids();
   renderAdminList();showToast('🎉 세트가 추가되었어요!');
 }
 function renderAdminList(){
