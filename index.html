@@ -1148,8 +1148,7 @@ async function loadWordSetsFromCloud(){
   }
 }
 
-async function init(){
-  await loadWordSetsFromCloud();
+function ensureDefaultSets(){
   if(!wordSets.length){
     wordSets=[
       {name:'기본 영어 단어',lang:'en',words:[{text:'apple',meaning:'사과'},{text:'banana',meaning:'바나나'},{text:'cat',meaning:'고양이'},{text:'dog',meaning:'강아지'},{text:'school',meaning:'학교'},{text:'book',meaning:'책'}]},
@@ -1157,7 +1156,21 @@ async function init(){
     ];
     saveWordSets();
   }
-  renderKeyboard('en');renderHome();
+}
+
+function init(){
+  // ★ 클라우드 응답을 기다리지 않고 로컬(캐시/기본값)로 즉시 첫 화면을 그려서
+  //   "홈을 눌러야만 목록이 보이는" 지연 현상을 없앤다.
+  ensureDefaultSets();
+  renderKeyboard('en');
+  renderHome();
+
+  // ★ 이후 Firebase에서 최신 데이터를 받아오면 홈 화면일 때만 다시 그려준다.
+  loadWordSetsFromCloud().then(()=>{
+    ensureDefaultSets();
+    const homeIsActive=document.getElementById('homePage').classList.contains('active');
+    if(homeIsActive) renderHome();
+  });
 }
 init();
 </script>
