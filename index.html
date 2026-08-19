@@ -256,7 +256,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 </style>
 <!-- 🔥 Firebase SDK: 단어 세트를 클라우드에 저장해서 모든 사용자가 같은 데이터를 보게 해줍니다 -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
 <div class="floaties" id="floaties"></div>
@@ -740,7 +740,7 @@ let db = null;
 let firebaseReady = false;
 try{
   firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
+  db = firebase.database();
   firebaseReady = true;
 }catch(e){
   console.warn('Firebase 초기화 실패 — firebaseConfig 값을 확인해 주세요.', e);
@@ -1197,7 +1197,7 @@ function deleteSet(i){if(!confirm(`"${wordSets[i].name}" 삭제할까요?`))retu
 function saveWordSets(){
   localStorage.setItem('typingSets',JSON.stringify(wordSets)); // 오프라인/실패 대비 임시 저장
   if(firebaseReady && db){
-    db.collection('typingApp').doc('wordSets').set({sets:wordSets})
+    db.ref('typingApp/wordSets').set(wordSets)
       .catch(e=>console.error('🔥 Firebase 저장 실패:', e));
   }
 }
@@ -1211,9 +1211,10 @@ function showToast(msg){
 async function loadWordSetsFromCloud(){
   if(!firebaseReady || !db) return;
   try{
-    const doc = await db.collection('typingApp').doc('wordSets').get();
-    if(doc.exists && Array.isArray(doc.data().sets) && doc.data().sets.length){
-      wordSets = doc.data().sets;
+    const snap = await db.ref('typingApp/wordSets').once('value');
+    const data = snap.val();
+    if(Array.isArray(data) && data.length){
+      wordSets = data;
       localStorage.setItem('typingSets',JSON.stringify(wordSets));
     }
   }catch(e){
