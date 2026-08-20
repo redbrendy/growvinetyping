@@ -254,9 +254,6 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
   #typingInput{font-size:1.25rem;}.hand-guide-wrap{gap:14px;}
 }
 </style>
-<!-- 🔥 Firebase SDK: 단어 세트를 클라우드에 저장해서 모든 사용자가 같은 데이터를 보게 해줍니다 -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
 <div class="floaties" id="floaties"></div>
@@ -637,13 +634,13 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div id="popupStage1">
       <div class="popup-stage-title">이 단어의 뜻은?</div>
       <div class="popup-ko-word" id="popupKoWord"></div>
-      <div class="popup-hint">🐾 <strong>Enter</strong> 를 누르면 영어 단어를 다시 볼 수 있어요!</div>
+      <div class="popup-hint">🐾 <strong>Enter</strong> 또는 <strong>스페이스바</strong>를 누르면 영어 단어를 다시 볼 수 있어요!</div>
     </div>
     <div id="popupStage2" style="display:none">
       <div class="popup-stage-title">영어로는?</div>
       <div class="popup-en-word" id="popupEnWord"></div>
       <button class="speak-btn" style="width:46px;height:46px;font-size:1.4rem;margin-bottom:10px;" onclick="speakCurrentWord()">🔊</button>
-      <div class="popup-hint">🌟 <strong>Enter</strong> 를 <strong>2번</strong> 더 누르면 다음 단어로 넘어가요!</div>
+      <div class="popup-hint">🌟 <strong>Enter</strong> 또는 <strong>스페이스바</strong>를 <strong>2번</strong> 더 누르면 다음 단어로 넘어가요!</div>
     </div>
   </div>
 </div>
@@ -725,26 +722,13 @@ function updateSoundBtn(){
 ══════════════════════════════════════ */
 const ADMIN_PW='1234';
 /* ══════════════════════════════════════
-   🔥 Firebase 설정
+   🔥 Firebase Realtime Database — REST API 직접 호출 방식
+   ★ 일부 학교/공용 와이파이는 Firebase SDK가 쓰는 WebSocket을 막아서
+     저장이 계속 실패하는 경우가 있었다. 순수 HTTPS(fetch)만 쓰는
+     REST API 방식으로 바꿔서 이 문제를 피한다.
 ══════════════════════════════════════ */
-const firebaseConfig = {
-  apiKey: "AIzaSyCYwf_ofk44T7RkIxeudlVpLZX2wptEkV0",
-  authDomain: "growvine-typing.firebaseapp.com",
-  databaseURL: "https://growvine-typing-default-rtdb.firebaseio.com",
-  projectId: "growvine-typing",
-  storageBucket: "growvine-typing.firebasestorage.app",
-  messagingSenderId: "270361921671",
-  appId: "1:270361921671:web:98c90bc9e569e08b06d022"
-};
-let db = null;
-let firebaseReady = false;
-try{
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.database();
-  firebaseReady = true;
-}catch(e){
-  console.warn('Firebase 초기화 실패 — firebaseConfig 값을 확인해 주세요.', e);
-}
+const FIREBASE_DB_URL = "https://growvine-typing-default-rtdb.firebaseio.com";
+const firebaseReady = true;
 
 let wordSets=JSON.parse(localStorage.getItem('typingSets')||'[]');
 let currentSet=null, practiceQueue=[], currentIdx=0;
@@ -945,7 +929,12 @@ const inp=document.getElementById('typingInput');
 inp.addEventListener('compositionstart',()=>{isComposing=true;});
 inp.addEventListener('compositionend',()=>{isComposing=false;checkInput();});
 inp.addEventListener('input',()=>{if(!isComposing){updateSpaceOverlay(inp.value);checkInput();}});
-inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();handleEnter();}});
+inp.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();handleEnter();return;}
+  // ★ 뜻 팝업이 떠 있을 때는 스페이스바로도 다음 단계/다음 단어로 넘어갈 수 있게 한다.
+  //   (팝업이 없을 때는 스페이스가 단어 안의 띄어쓰기로 쓰이므로 그대로 입력되게 둔다)
+  if(e.key===' ' && popupStep>0){e.preventDefault();handleEnter();}
+});
 
 /* ══════════════════════════════════════
    ★ 1번: 틀리면 입력창 초기화 후 같은 단어 재시도
@@ -1170,7 +1159,7 @@ function renderAdminList(){
   wordSets.forEach((set,i)=>{
     const item=document.createElement('div');item.className='admin-set-item';
     const header=document.createElement('div');header.className='admin-set-item-header';
-    header.innerHTML=`<div><div class="item-name">${set.lang==='ko'?'🇰🇷':'🇺🇸'} ${set.name}</div><div class="item-meta">📝 단어 ${set.words.length}개 · 클릭해서 수정</div></div><div class="item-actions"><span style="font-size:1rem;color:var(--muted);" id="editArrow${i}">▼</span><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSet(${i})">🗑</button></div>`;
+    header.innerHTML=`<div><div class="item-name">${set.lang==='ko'?'🇰🇷':'🇺🇸'} ${set.name}</div><div class="item-meta">📝 단어 ${set.words.length}개 · 클릭해서 수정</div></div><div class="item-actions"><button class="btn btn-sm" style="background:var(--bg2);padding:5px 9px;${i===0?'opacity:.35;cursor:default;':''}" ${i===0?'disabled':''} onclick="event.stopPropagation();moveSet(${i},-1)" title="위로 이동">⬆️</button><button class="btn btn-sm" style="background:var(--bg2);padding:5px 9px;${i===wordSets.length-1?'opacity:.35;cursor:default;':''}" ${i===wordSets.length-1?'disabled':''} onclick="event.stopPropagation();moveSet(${i},1)" title="아래로 이동">⬇️</button><span style="font-size:1rem;color:var(--muted);" id="editArrow${i}">▼</span><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSet(${i})">🗑</button></div>`;
     header.onclick=()=>toggleEditPanel(i);item.appendChild(header);
     const panel=document.createElement('div');panel.className='admin-edit-panel';panel.id=`editPanel${i}`;
     let wHtml='';
@@ -1194,12 +1183,26 @@ function deleteWord(si,wi){if(wordSets[si].words.length<=1){alert('최소 1개 �
 function addWord(si){const isEn=wordSets[si].lang==='en';wordSets[si].words.push(isEn?{text:'',meaning:''}:{text:''});renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${si}`);const a=document.getElementById(`editArrow${si}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}const l=document.getElementById(`wordList${si}`);if(l){const ins=l.querySelectorAll('input');if(ins.length)ins[ins.length-(isEn?2:1)].focus();}},10);}
 function saveSet(i){wordSets[i].words=wordSets[i].words.filter(w=>w.text.trim());if(!wordSets[i].words.length){alert('단어 최소 1개!');return;}if(!wordSets[i].name.trim()){alert('세트 이름 입력!');return;}saveWordSets();renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${i}`);const a=document.getElementById(`editArrow${i}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);showToast('💾 저장되었어요!');}
 function deleteSet(i){if(!confirm(`"${wordSets[i].name}" 삭제할까요?`))return;wordSets.splice(i,1);saveWordSets();renderAdminList();}
+function moveSet(i,dir){
+  const j=i+dir;
+  if(j<0||j>=wordSets.length)return;
+  [wordSets[i],wordSets[j]]=[wordSets[j],wordSets[i]];
+  saveWordSets();
+  renderAdminList();
+}
 function saveWordSets(){
   localStorage.setItem('typingSets',JSON.stringify(wordSets)); // 오프라인/실패 대비 임시 저장
-  if(firebaseReady && db){
-    db.ref('typingApp/wordSets').set(wordSets)
-      .catch(e=>console.error('🔥 Firebase 저장 실패:', e));
-  }
+  if(!firebaseReady) return;
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 8000);
+  fetch(`${FIREBASE_DB_URL}/typingApp/wordSets.json`, {
+    method: 'PUT',
+    body: JSON.stringify(wordSets),
+    signal: ctrl.signal
+  })
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); })
+    .catch(e=>console.error('🔥 Firebase 저장 실패:', e))
+    .finally(()=>clearTimeout(timer));
 }
 
 function showToast(msg){
@@ -1209,16 +1212,21 @@ function showToast(msg){
 }
 
 async function loadWordSetsFromCloud(){
-  if(!firebaseReady || !db) return;
+  if(!firebaseReady) return;
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 8000);
   try{
-    const snap = await db.ref('typingApp/wordSets').once('value');
-    const data = snap.val();
+    const res = await fetch(`${FIREBASE_DB_URL}/typingApp/wordSets.json`, {signal: ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
     if(Array.isArray(data) && data.length){
       wordSets = data;
       localStorage.setItem('typingSets',JSON.stringify(wordSets));
     }
   }catch(e){
     console.error('🔥 Firebase 불러오기 실패, 로컬 데이터를 사용합니다:', e);
+  }finally{
+    clearTimeout(timer);
   }
 }
 
