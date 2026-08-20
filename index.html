@@ -637,13 +637,13 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div id="popupStage1">
       <div class="popup-stage-title">이 단어의 뜻은?</div>
       <div class="popup-ko-word" id="popupKoWord"></div>
-      <div class="popup-hint">🐾 <strong>Enter</strong> 를 누르면 영어 단어를 다시 볼 수 있어요!</div>
+      <div class="popup-hint">🐾 <strong>Enter</strong> 또는 <strong>스페이스바</strong>를 누르면 영어 단어를 다시 볼 수 있어요!</div>
     </div>
     <div id="popupStage2" style="display:none">
       <div class="popup-stage-title">영어로는?</div>
       <div class="popup-en-word" id="popupEnWord"></div>
       <button class="speak-btn" style="width:46px;height:46px;font-size:1.4rem;margin-bottom:10px;" onclick="speakCurrentWord()">🔊</button>
-      <div class="popup-hint">🌟 <strong>Enter</strong> 를 <strong>2번</strong> 더 누르면 다음 단어로 넘어가요!</div>
+      <div class="popup-hint">🌟 <strong>Enter</strong> 또는 <strong>스페이스바</strong>를 <strong>2번</strong> 더 누르면 다음 단어로 넘어가요!</div>
     </div>
   </div>
 </div>
@@ -945,7 +945,12 @@ const inp=document.getElementById('typingInput');
 inp.addEventListener('compositionstart',()=>{isComposing=true;});
 inp.addEventListener('compositionend',()=>{isComposing=false;checkInput();});
 inp.addEventListener('input',()=>{if(!isComposing){updateSpaceOverlay(inp.value);checkInput();}});
-inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();handleEnter();}});
+inp.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();handleEnter();return;}
+  // ★ 뜻 팝업이 떠 있을 때는 스페이스바로도 다음 단계/다음 단어로 넘어갈 수 있게 한다.
+  //   (팝업이 없을 때는 스페이스가 단어 안의 띄어쓰기로 쓰이므로 그대로 입력되게 둔다)
+  if(e.key===' ' && popupStep>0){e.preventDefault();handleEnter();}
+});
 
 /* ══════════════════════════════════════
    ★ 1번: 틀리면 입력창 초기화 후 같은 단어 재시도
