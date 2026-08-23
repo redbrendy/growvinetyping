@@ -130,18 +130,19 @@ main{flex:1;display:flex;flex-direction:column;padding:14px 13px 8px;gap:11px;ma
 .kb-title{font-size:.82rem;color:var(--muted);text-align:center;margin-bottom:5px;font-weight:700;}
 .keyboard{display:flex;flex-direction:column;gap:3px;align-items:center;}
 .kb-row{display:flex;gap:3px;justify-content:center;}
-.key{min-width:33px;height:33px;border-radius:8px;border:2px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;cursor:default;flex-direction:column;line-height:1.1;position:relative;transition:transform .08s,box-shadow .08s;user-select:none;font-family:inherit;box-shadow:0 3px 0 rgba(0,0,0,.15);}
-.key .ko-label{font-size:.56rem;opacity:.8;}
-.key.active-key{transform:scale(1.22) translateY(-3px);box-shadow:0 6px 0 rgba(0,0,0,.2),0 0 0 3px rgba(255,255,255,.6);z-index:2;}
+.key{min-width:37px;height:37px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text);display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:900;cursor:default;flex-direction:column;line-height:1.1;position:relative;transition:transform .08s,box-shadow .08s,background .08s,color .08s;user-select:none;font-family:inherit;box-shadow:0 3px 0 rgba(0,0,0,.06);}
+.key .ko-label{font-size:.64rem;opacity:.75;}
+.key.active-key{transform:scale(1.3) translateY(-4px);box-shadow:0 6px 0 rgba(0,0,0,.2),0 0 0 4px #fff,0 0 0 7px var(--pk);z-index:2;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);}
+.key.active-key .ko-label{opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.35);}
 .key.space-key{min-width:145px;}.key.wide-key{min-width:50px;}.key.wider-key{min-width:66px;}
-.f1{background:var(--f1);color:#fff;}.f2{background:var(--f2);color:#fff;}.f3{background:var(--f3);color:#fff;}.f4{background:var(--f4);color:#fff;}
-.f5{background:var(--f5);color:#fff;}.f6{background:var(--f6);color:#fff;}.f7{background:var(--f7);color:#fff;}.f8{background:var(--f8);color:#fff;}
-.f-thumb{background:var(--f-thumb);color:#fff;}
+.key.active-key.f1{background:var(--f1);}.key.active-key.f2{background:var(--f2);}.key.active-key.f3{background:var(--f3);}.key.active-key.f4{background:var(--f4);}
+.key.active-key.f5{background:var(--f5);}.key.active-key.f6{background:var(--f6);}.key.active-key.f7{background:var(--f7);}.key.active-key.f8{background:var(--f8);}
+.key.active-key.f-thumb{background:var(--f-thumb);}
 
 /* 손 SVG */
-.hand-guide-wrap{display:flex;justify-content:center;align-items:flex-end;gap:36px;padding:8px 0 3px;}
+.hand-guide-wrap{display:flex;justify-content:center;align-items:flex-end;gap:50px;padding:10px 0 5px;}
 .hand-svg-wrap{text-align:center;}
-.hand-label{font-size:.82rem;color:var(--muted);font-weight:800;margin-bottom:5px;}
+.hand-label{font-size:.95rem;color:var(--muted);font-weight:800;margin-bottom:6px;}
 .hand-svg .fing-1,.hand-svg .fing-2,.hand-svg .fing-3,.hand-svg .fing-4,
 .hand-svg .fing-5,.hand-svg .fing-6,.hand-svg .fing-7,.hand-svg .fing-8,
 .hand-svg .thumb-l,.hand-svg .thumb-r{transition:opacity .2s,filter .2s;opacity:.28;}
@@ -248,10 +249,20 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 /* 토스트 */
 #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--pk),var(--lv));color:#fff;padding:9px 26px;border-radius:24px;font-weight:800;font-size:.95rem;z-index:9999;box-shadow:0 4px 20px rgba(255,143,171,.4);transition:opacity .3s;display:none;}
 
+/* ── 게이미피케이션 ── */
+.combo-pop{animation:comboPop .35s ease;}
+@keyframes comboPop{0%{transform:scale(1.6);color:#FF6B6B;}100%{transform:scale(1);}}
+.badge-chip{background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:12px 14px;text-align:center;min-width:110px;}
+.badge-chip.locked{opacity:.35;filter:grayscale(1);}
+.leaderboard-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:9px 15px;font-weight:700;}
+.leaderboard-row.me{border-color:var(--pk);background:#FFF0F5;}
+.student-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+
 @media(max-width:600px){
-  .key{min-width:25px;height:27px;font-size:.6rem;}.key.space-key{min-width:105px;}
+  .key{min-width:28px;height:30px;font-size:.68rem;}.key.space-key{min-width:105px;}
   .popup-box{padding:26px 16px;}.prompt-word{font-size:2.1rem;}
-  #typingInput{font-size:1.25rem;}.hand-guide-wrap{gap:14px;}
+  #typingInput{font-size:1.25rem;}.hand-guide-wrap{gap:20px;flex-wrap:wrap;}
+  .hand-svg{width:150px !important;height:178px !important;}
 }
 </style>
 </head>
@@ -312,7 +323,9 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
   <h1>⌨️ 타자연습 <span class="sub">그로바인 영어 🌟</span></h1>
   <div class="header-btns">
     <button class="sound-toggle" id="soundToggleBtn" onclick="toggleSoundQuick()">🔊 소리 켜짐</button>
+    <button class="btn btn-ghost btn-sm" id="fullscreenBtn" onclick="toggleFullscreen()">⛶ 전체화면</button>
     <button class="btn btn-ghost btn-sm" onclick="toggleSettings()">⚙️ 설정</button>
+    <button class="btn btn-ghost btn-sm" onclick="openLeaderboard()">🏆 순위</button>
     <button class="btn btn-ghost btn-sm" onclick="goHome()">🏠 홈</button>
     <button class="btn btn-white btn-sm" onclick="openAdmin()">관리자</button>
   </div>
@@ -411,9 +424,78 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       </div>
     </div>
   </div>
+  <div class="card student-bar">
+    <div id="studentBarInfo" style="font-weight:800;"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="showStudentPicker()">🙋 학생 바꾸기</button>
+      <button class="btn btn-sm" style="background:var(--yw2);color:#8B6914;" onclick="openLeaderboard()">🏆 순위 보기</button>
+      <button class="btn btn-sm" style="background:var(--bg2);" onclick="openBadgesPage()">🎖 내 배지</button>
+    </div>
+  </div>
   <div class="card">
     <div class="card-title">📚 단어 세트 선택</div>
     <div id="wordSetGrid" class="word-set-grid"></div>
+  </div>
+</div>
+
+<!-- ══ 학생 선택 ══ -->
+<div id="studentPickPage" class="page">
+  <div class="card">
+    <div class="card-title">🙋 누구인가요?</div>
+    <div id="studentPickGrid" class="word-set-grid"></div>
+    <div style="margin-top:10px;color:var(--muted);font-size:.85rem;">* 학생 명단이 없다면 관리자 메뉴 &gt; 학생 관리에서 추가해 주세요.</div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;background:var(--bg2);color:var(--text);" onclick="goHome()">🏠 취소하고 홈으로</button>
+  </div>
+</div>
+
+<!-- ══ 제출형 연습(2/4단계) ══ -->
+<div id="submitPracticePage" class="page">
+  <div class="card" style="padding:11px 16px;">
+    <div class="practice-top">
+      <span class="set-label" id="submitSetName">단어 세트</span>
+      <div class="progress-wrap"><div class="progress-fill" id="submitProgressFill" style="width:0%"></div></div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-val" id="submitStatCorrect">0</div><div class="stat-lbl">✅ 맞음</div></div>
+        <div class="stat-box"><div class="stat-val" id="submitStatRemain">0</div><div class="stat-lbl">📝 남음</div></div>
+        <div class="stat-box"><div class="stat-val" id="submitStatScore">0</div><div class="stat-lbl">⭐ 점수</div></div>
+        <div class="stat-box"><div class="stat-val combo-flash-target" id="submitStatCombo">x0</div><div class="stat-lbl">🔥 콤보</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="prompt-area">
+      <div class="prompt-label" id="submitStageLabel">2단계</div>
+      <div class="prompt-word" id="submitPromptWord" style="font-size:2.6rem;"></div>
+    </div>
+    <div class="input-area">
+      <div class="input-wrap">
+        <input type="text" id="submitInput" placeholder="정답을 입력하고 Enter ↵"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+    </div>
+    <div id="submitFeedback" style="text-align:center;font-weight:800;margin-top:8px;min-height:26px;"></div>
+    <div style="display:flex;justify-content:center;margin-top:8px;">
+      <button class="btn btn-primary" onclick="submitAnswer()">제출 ↵</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 배지 & 캐릭터 ══ -->
+<div id="badgesPage" class="page">
+  <div class="card">
+    <div class="card-title">🎖 내 배지 &amp; 캐릭터</div>
+    <div id="mascotGrowthArea" style="text-align:center;margin-bottom:14px;"></div>
+    <div id="badgeGrid" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:14px;background:var(--bg2);color:var(--text);" onclick="goHome()">🏠 홈으로</button>
+  </div>
+</div>
+
+<!-- ══ 리더보드 ══ -->
+<div id="leaderboardPage" class="page">
+  <div class="card">
+    <div class="card-title">🏆 친구들과 순위 보기</div>
+    <div id="leaderboardList" style="display:flex;flex-direction:column;gap:7px;"></div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:14px;background:var(--bg2);color:var(--text);" onclick="goHome()">🏠 홈으로</button>
   </div>
 </div>
 
@@ -427,6 +509,8 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
         <div class="stat-box"><div class="stat-val" id="statCorrect">0</div><div class="stat-lbl">✅ 맞음</div></div>
         <div class="stat-box"><div class="stat-val" id="statWrong">0</div><div class="stat-lbl">❌ 틀림</div></div>
         <div class="stat-box"><div class="stat-val" id="statRemain">0</div><div class="stat-lbl">📝 남음</div></div>
+        <div class="stat-box"><div class="stat-val" id="statScore">0</div><div class="stat-lbl">⭐ 점수</div></div>
+        <div class="stat-box"><div class="stat-val combo-flash-target" id="statCombo">x0</div><div class="stat-lbl">🔥 콤보</div></div>
       </div>
     </div>
   </div>
@@ -443,7 +527,8 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div class="input-area">
       <div class="input-wrap">
         <input type="text" id="typingInput" placeholder="여기에 입력하세요 🖊️"
-               autocomplete="off" autocorrect="off" spellcheck="false">
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
         <div id="spaceOverlay"></div>
       </div>
     </div>
@@ -458,7 +543,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div class="hand-guide-wrap">
       <div class="hand-svg-wrap">
         <div class="hand-label">👈 왼손</div>
-        <svg class="hand-svg" width="105" height="125" viewBox="0 0 110 130" fill="none">
+        <svg class="hand-svg" width="195" height="232" viewBox="0 0 110 130" fill="none">
           <path class="palm" d="M18 75 Q14 110 20 125 Q35 132 55 128 Q70 125 75 110 L78 75 Z"/>
           <rect class="fing-1" id="lf1" x="14" y="30" width="16" height="50" rx="8" transform="rotate(-8 14 80)"/>
           <rect class="fing-2" id="lf2" x="31" y="16" width="17" height="63" rx="8.5" transform="rotate(-3 31 79)"/>
@@ -471,7 +556,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       </div>
       <div class="hand-svg-wrap">
         <div class="hand-label">오른손 👉</div>
-        <svg class="hand-svg" width="105" height="125" viewBox="0 0 110 130" fill="none">
+        <svg class="hand-svg" width="195" height="232" viewBox="0 0 110 130" fill="none">
           <path class="palm" d="M92 75 Q96 110 90 125 Q75 132 55 128 Q40 125 35 110 L32 75 Z"/>
           <rect class="fing-5" id="rf5" x="27" y="18" width="17" height="61" rx="8.5" transform="rotate(-4 27 79)"/>
           <rect class="fing-6" id="rf6" x="44" y="10" width="17" height="68" rx="8.5"/>
@@ -576,7 +661,10 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       <div class="result-stat"><div class="v" id="reCorrect">0</div><div class="l">✅ 맞은 단어</div></div>
       <div class="result-stat"><div class="v" id="reWrong">0</div><div class="l">🔄 틀린 횟수</div></div>
       <div class="result-stat"><div class="v" id="reTotal">0</div><div class="l">📝 총 단어 수</div></div>
+      <div class="result-stat"><div class="v" id="reScore">0</div><div class="l">⭐ 획득 점수</div></div>
     </div>
+    <div id="reMascotLine" style="font-weight:800;margin-bottom:10px;"></div>
+    <div id="reBadgesNew" style="color:#8B6914;font-weight:800;margin-bottom:14px;"></div>
     <button class="btn btn-primary" style="font-size:1rem;padding:11px 32px;" onclick="goHome()">🏠 홈으로 돌아가기</button>
   </div>
 </div>
@@ -617,6 +705,16 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     </div>
     <div class="card-title">📋 저장된 세트 <span style="font-size:.78rem;color:var(--muted);font-weight:600;">(클릭 시 수정)</span></div>
     <div class="admin-set-list" id="adminSetList"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🙋 학생 관리</div>
+    <div style="display:flex;gap:7px;margin-bottom:12px;">
+      <input type="text" id="adminStudentName" placeholder="학생 이름" maxlength="20"
+        style="flex:1;padding:9px 13px;border:2.5px solid var(--border);border-radius:13px;font-size:.95rem;outline:none;font-family:inherit;">
+      <button class="btn btn-primary btn-sm" onclick="addStudent()">＋ 추가</button>
+    </div>
+    <div id="adminStudentList" style="display:flex;flex-direction:column;gap:6px;"></div>
   </div>
 </div>
 
@@ -717,6 +815,27 @@ function updateSoundBtn(){
   else{btn.textContent='🔇 소리 꺼짐';btn.classList.add('off');}
 }
 
+/* ── 전체화면 ── */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    const el=document.documentElement;
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+    if(req) req.call(el).catch(()=>showToast('⚠️ 이 기기에서는 전체화면이 지원되지 않아요'));
+    else showToast('⚠️ 이 기기에서는 전체화면이 지원되지 않아요');
+  }else{
+    const exit=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
+    if(exit) exit.call(document);
+  }
+}
+function updateFullscreenBtn(){
+  const btn=document.getElementById('fullscreenBtn');
+  if(!btn) return;
+  if(document.fullscreenElement) btn.textContent='⛶ 전체화면 종료';
+  else btn.textContent='⛶ 전체화면';
+}
+document.addEventListener('fullscreenchange', updateFullscreenBtn);
+document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
+
 /* ══════════════════════════════════════
    데이터 & 상태
 ══════════════════════════════════════ */
@@ -735,6 +854,225 @@ let currentSet=null, practiceQueue=[], currentIdx=0;
 let correctCount=0, wrongTotalCount=0, isRetry=false;
 let isComposing=false, popupStep=0, popupEnterCount=0;
 let repeatTimer=null;
+
+/* ══════════════════════════════════════
+   🙋 학생 명단 — wordSets와 동일한 REST 저장 패턴
+══════════════════════════════════════ */
+let students=JSON.parse(localStorage.getItem('typingStudents')||'[]');
+let currentStudent=localStorage.getItem('typingStudent')||null;
+
+function saveStudents(){
+  localStorage.setItem('typingStudents',JSON.stringify(students));
+  if(!firebaseReady) return;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  fetch(`${FIREBASE_DB_URL}/typingApp/students.json`,{method:'PUT',body:JSON.stringify(students),signal:ctrl.signal})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);})
+    .catch(e=>console.error('🔥 학생 저장 실패:',e))
+    .finally(()=>clearTimeout(timer));
+}
+async function loadStudentsFromCloud(){
+  if(!firebaseReady) return;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  try{
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/students.json`,{signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    if(Array.isArray(data)&&data.length){students=data;localStorage.setItem('typingStudents',JSON.stringify(students));}
+  }catch(e){console.error('🔥 학생 불러오기 실패:',e);}finally{clearTimeout(timer);}
+}
+function addStudent(){
+  const inp=document.getElementById('adminStudentName');
+  const name=inp.value.trim();
+  if(!name){alert('학생 이름을 입력하세요!');return;}
+  if(students.includes(name)){alert('이미 등록된 이름이에요!');return;}
+  students.push(name);saveStudents();inp.value='';
+  renderAdminStudentList();showToast('🙋 학생이 추가되었어요!');
+}
+function deleteStudent(i){
+  if(!confirm(`"${students[i]}" 학생을 삭제할까요?`))return;
+  students.splice(i,1);saveStudents();renderAdminStudentList();
+}
+function renderAdminStudentList(){
+  const list=document.getElementById('adminStudentList');
+  if(!list) return;
+  list.innerHTML='';
+  if(!students.length){list.innerHTML='<p style="color:var(--muted);font-weight:700;padding:7px;">등록된 학생이 없어요 🐾</p>';return;}
+  students.forEach((name,i)=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:8px 13px;';
+    row.innerHTML=`<span style="font-weight:800;">🙋 ${name}</span><button class="btn btn-danger btn-sm" onclick="deleteStudent(${i})">🗑</button>`;
+    list.appendChild(row);
+  });
+}
+
+/* ══════════════════════════════════════
+   🏆 게이미피케이션 — 점수/콤보/배지/캐릭터 성장
+══════════════════════════════════════ */
+let sessionScore=0, combo=0, maxCombo=0, sessionCorrectTotal=0, sessionWrongTotal=0;
+let progressCache={};
+
+const BADGES=[
+  {id:'first_set',name:'첫 세트 완료',emoji:'🏅',check:p=>Object.keys(p.sets||{}).length>=1},
+  {id:'combo10',name:'콤보 10 달성',emoji:'🔥',check:p=>(p.maxCombo||0)>=10},
+  {id:'all4stage',name:'전체 4단계 클리어',emoji:'🌟',check:p=>!!p.completedAll4},
+  {id:'score500',name:'점수 500점 달성',emoji:'💎',check:p=>(p.totalScore||0)>=500},
+  {id:'sets5',name:'세트 5회 완료',emoji:'🏆',check:p=>Object.values(p.sets||{}).reduce((a,s)=>a+s.timesCompleted,0)>=5}
+];
+
+function registerCorrect(comboContinue){
+  combo=comboContinue?combo+1:1;
+  if(combo>maxCombo) maxCombo=combo;
+  const pts=10+Math.min(combo,10)*2;
+  sessionScore+=pts;
+  sessionCorrectTotal++;
+  updateScoreUI();
+  flashCombo();
+}
+function registerWrong(){
+  combo=0;
+  sessionWrongTotal++;
+  updateScoreUI();
+}
+function updateScoreUI(){
+  ['statScore','submitStatScore'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=sessionScore;});
+  ['statCombo','submitStatCombo'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='x'+combo;});
+}
+function flashCombo(){
+  document.querySelectorAll('.combo-flash-target').forEach(el=>{
+    el.classList.remove('combo-pop');void el.offsetWidth;el.classList.add('combo-pop');
+  });
+}
+
+function studentKey(name){ return encodeURIComponent(name).replace(/[.#$\[\]]/g,'_'); }
+function defaultProgress(){ return {totalScore:0,badges:[],sets:{},maxCombo:0,mascot:null,completedAll4:false}; }
+function getProgress(name){
+  if(!progressCache[name]){
+    progressCache[name]=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
+  }
+  return progressCache[name];
+}
+function saveProgress(name,p){
+  progressCache[name]=p;
+  localStorage.setItem('typingProgress_'+name,JSON.stringify(p));
+  if(!firebaseReady) return;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  fetch(`${FIREBASE_DB_URL}/typingApp/progress/${studentKey(name)}.json`,{method:'PUT',body:JSON.stringify(p),signal:ctrl.signal})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);})
+    .catch(e=>console.error('🔥 진행상황 저장 실패:',e))
+    .finally(()=>clearTimeout(timer));
+}
+async function loadProgressFromCloud(name){
+  if(!firebaseReady) return;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  try{
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/progress/${studentKey(name)}.json`,{signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    if(data){progressCache[name]=data;localStorage.setItem('typingProgress_'+name,JSON.stringify(data));}
+  }catch(e){console.error('🔥 진행상황 불러오기 실패:',e);}finally{clearTimeout(timer);}
+}
+async function loadAllProgressFromCloud(){
+  if(!firebaseReady) return {};
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  try{
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/progress.json`,{signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    return data||{};
+  }catch(e){console.error('🔥 리더보드 불러오기 실패:',e);return {};}finally{clearTimeout(timer);}
+}
+
+function finishSet(){
+  stopRepeatSpeak();
+  const p=getProgress(currentStudent);
+  p.totalScore=(p.totalScore||0)+sessionScore;
+  p.maxCombo=Math.max(p.maxCombo||0,maxCombo);
+  p.sets=p.sets||{};
+  p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0};
+  p.sets[currentSet.name].timesCompleted++;
+  if(stageQueue.includes(4)) p.completedAll4=true;
+  if(!p.mascot) p.mascot={type:Math.random()<0.5?'cat':'dog',points:0};
+  p.mascot.points=p.totalScore;
+  const newBadges=awardBadges(p);
+  saveProgress(currentStudent,p);
+  showSetComplete(newBadges,p);
+}
+function awardBadges(p){
+  p.badges=p.badges||[];
+  const earned=[];
+  BADGES.forEach(b=>{ if(!p.badges.includes(b.id)&&b.check(p)){p.badges.push(b.id);earned.push(b);} });
+  return earned;
+}
+function showSetComplete(newBadges,p){
+  document.getElementById('resultSub').textContent=`🌸 ${currentSet.name} 전체 단계 완료!`;
+  document.getElementById('reCorrect').textContent=sessionCorrectTotal;
+  document.getElementById('reWrong').textContent=sessionWrongTotal;
+  document.getElementById('reTotal').textContent=currentSet.words.length;
+  document.getElementById('reScore').textContent=sessionScore;
+  const lvl=Math.floor((p.totalScore||0)/100)+1;
+  document.getElementById('reMascotLine').innerHTML=`${p.mascot.type==='dog'?'🐶':'🐱'} 캐릭터 레벨 <strong>Lv.${lvl}</strong> (${'⭐'.repeat(Math.min(lvl,10))})`;
+  document.getElementById('reBadgesNew').innerHTML=newBadges.length?('🎉 새 배지 획득! '+newBadges.map(b=>`${b.emoji} ${b.name}`).join(' · ')):'';
+  showPage('resultPage');
+}
+
+function updateStudentBar(){
+  const el=document.getElementById('studentBarInfo');
+  if(!el) return;
+  if(!currentStudent){el.textContent='🙋 먼저 학생을 선택해 주세요!';return;}
+  const p=getProgress(currentStudent);
+  const lvl=Math.floor((p.totalScore||0)/100)+1;
+  const emoji=(p.mascot&&p.mascot.type==='dog')?'🐶':'🐱';
+  el.innerHTML=`${emoji} <strong>${currentStudent}</strong> · Lv.${lvl} · ⭐${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개`;
+}
+
+function openBadgesPage(){
+  if(!currentStudent){showToast('🙋 먼저 학생을 선택해 주세요!');showStudentPicker();return;}
+  showPage('badgesPage');renderBadgesPage();
+}
+function renderBadgesPage(){
+  const p=getProgress(currentStudent);
+  const lvl=Math.floor((p.totalScore||0)/100)+1;
+  const type=(p.mascot&&p.mascot.type)||'cat';
+  document.getElementById('mascotGrowthArea').innerHTML=
+    `<div style="font-size:3rem;">${type==='dog'?'🐶':'🐱'}</div>`+
+    `<div style="font-weight:900;font-size:1.2rem;color:var(--pk);">${currentStudent} · Lv.${lvl}</div>`+
+    `<div style="color:var(--muted);font-weight:700;">⭐ ${p.totalScore||0}점 · ${'⭐'.repeat(Math.min(lvl,10))}</div>`+
+    `<div style="margin-top:8px;"><button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="switchMascot()">🔄 캐릭터 바꾸기</button></div>`;
+  const grid=document.getElementById('badgeGrid');grid.innerHTML='';
+  BADGES.forEach(b=>{
+    const got=(p.badges||[]).includes(b.id);
+    const chip=document.createElement('div');chip.className='badge-chip'+(got?'':' locked');
+    chip.innerHTML=`<div style="font-size:1.8rem;">${b.emoji}</div><div style="font-size:.85rem;font-weight:800;">${b.name}</div>`;
+    grid.appendChild(chip);
+  });
+}
+function switchMascot(){
+  const p=getProgress(currentStudent);
+  p.mascot=p.mascot||{type:'cat',points:p.totalScore||0};
+  p.mascot.type=p.mascot.type==='dog'?'cat':'dog';
+  saveProgress(currentStudent,p);
+  renderBadgesPage();updateStudentBar();
+}
+
+async function openLeaderboard(){
+  showPage('leaderboardPage');
+  const list=document.getElementById('leaderboardList');
+  list.innerHTML='<p style="color:var(--muted);font-weight:700;">불러오는 중...</p>';
+  const cloud=await loadAllProgressFromCloud();
+  const rows=students.map(name=>{
+    const key=studentKey(name);
+    const data=cloud[key]||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
+    return {name,score:data.totalScore||0,badges:(data.badges||[]).length};
+  }).sort((a,b)=>b.score-a.score);
+  list.innerHTML='';
+  if(!rows.length){list.innerHTML='<p style="color:var(--muted);font-weight:700;">등록된 학생이 없어요 🐾</p>';return;}
+  rows.forEach((r,i)=>{
+    const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+    const row=document.createElement('div');row.className='leaderboard-row'+(r.name===currentStudent?' me':'');
+    row.innerHTML=`<span>${medal} ${r.name}</span><span>⭐${r.score}점 · 🎖${r.badges}개</span>`;
+    list.appendChild(row);
+  });
+}
 
 /* ── 키보드 ── */
 const KB_ROWS=[
@@ -852,30 +1190,147 @@ function renderHome(){
   wordSets.forEach((set,i)=>{
     const card=document.createElement('div');card.className='word-set-card';
     card.innerHTML=`<div class="set-deco">${decos[i%decos.length]}</div><div class="set-lang-badge ${set.lang}">${set.lang==='ko'?'🇰🇷 한글':'🇺🇸 영어'}</div><div class="set-name">${set.name}</div><div class="set-count">📝 단어 ${set.words.length}개</div>`;
-    card.onclick=()=>startPractice(i);grid.appendChild(card);
+    card.onclick=()=>onWordSetClick(i);grid.appendChild(card);
+  });
+  updateStudentBar();
+}
+
+/* ── 연습 시작(학생 선택 → 4단계 진행) ── */
+let pendingSetIdx=null;
+let stageQueue=[], stageQueueIdx=0, currentStage=1;
+
+function onWordSetClick(idx){
+  pendingSetIdx=idx;
+  if(!currentStudent){ showStudentPicker(); return; }
+  beginStageFlow(idx);
+}
+function showStudentPicker(){ showPage('studentPickPage'); renderStudentPickGrid(); }
+function renderStudentPickGrid(){
+  const grid=document.getElementById('studentPickGrid');grid.innerHTML='';
+  if(!students.length){grid.innerHTML='<p style="color:var(--muted);font-size:.95rem;grid-column:1/-1;font-weight:700;">등록된 학생이 없어요 🐾<br>관리자 메뉴 &gt; 학생 관리에서 추가해 주세요!</p>';return;}
+  students.forEach(name=>{
+    const card=document.createElement('div');card.className='word-set-card';card.style.textAlign='center';
+    card.innerHTML=`<div style="font-size:1.8rem;">🙋</div><div class="set-name">${name}</div>`;
+    card.onclick=()=>selectStudent(name);
+    grid.appendChild(card);
+  });
+}
+function selectStudent(name){
+  currentStudent=name;
+  localStorage.setItem('typingStudent',name);
+  loadProgressFromCloud(name).then(()=>{
+    updateStudentBar();
+    if(pendingSetIdx!=null){const idx=pendingSetIdx;pendingSetIdx=null;beginStageFlow(idx);}
+    else{goHome();}
   });
 }
 
-/* ── 연습 시작 ── */
-function startPractice(idx){
+function beginStageFlow(idx){
   currentSet=wordSets[idx];
-  practiceQueue=shuffle([...currentSet.words]);
-  currentIdx=0;correctCount=0;wrongTotalCount=0;isRetry=false;
-  popupStep=0;popupEnterCount=0;
-  document.getElementById('practiceSetName').textContent=currentSet.name;
-  showPage('practicePage');
-  renderKeyboard(currentSet.lang==='ko'?'ko':'en');
-  document.getElementById('speakBtn').style.display=currentSet.lang==='ko'?'none':'inline-flex';
-  loadWord();
-  document.getElementById('typingInput').focus();
+  sessionScore=0;combo=0;maxCombo=0;sessionCorrectTotal=0;sessionWrongTotal=0;
+  stageQueue=buildStageQueue(currentSet);
+  stageQueueIdx=0;
+  startStage(stageQueue[0]);
+}
+function buildStageQueue(set){
+  const stages=[1];
+  if(set.lang==='en') stages.push(2);
+  stages.push(3);
+  const hasMeanings=set.words.some(w=>w.meaning&&w.meaning.trim());
+  if(set.lang==='en'&&hasMeanings) stages.push(4);
+  return stages;
+}
+function startStage(stage){
+  currentStage=stage;
+  if(stage===1||stage===3){
+    practiceQueue=shuffle([...currentSet.words]);
+    currentIdx=0;correctCount=0;wrongTotalCount=0;isRetry=false;
+    popupStep=0;popupEnterCount=0;
+    document.getElementById('practiceSetName').textContent=`${currentSet.name} · ${stageQueueIdx+1}/${stageQueue.length}단계`;
+    showPage('practicePage');
+    renderKeyboard(currentSet.lang==='ko'?'ko':'en');
+    document.getElementById('speakBtn').style.display=currentSet.lang==='ko'?'none':'inline-flex';
+    updateScoreUI();
+    loadWord();
+    document.getElementById('typingInput').focus();
+  }else{
+    startSubmitStage(stage);
+  }
+}
+function onStage13Done(){ onStageFinished(); }
+function onStageFinished(){
+  stageQueueIdx++;
+  if(stageQueueIdx<stageQueue.length){
+    showToast(`✅ ${currentStage}단계 완료! 다음 단계로 이동해요`);
+    setTimeout(()=>startStage(stageQueue[stageQueueIdx]),900);
+  }else{
+    finishSet();
+  }
 }
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+/* ══════════════════════════════════════
+   2/4단계 — 제출형(써넣기) 연습 엔진
+══════════════════════════════════════ */
+let submitQueue=[], submitIdx=0, submitWrongThisWord=false;
+function maskVowels(word){ return [...word].map(c=>/[aeiouAEIOU]/.test(c)?'_':c).join(''); }
+function startSubmitStage(stage){
+  submitQueue=shuffle([...currentSet.words]);
+  submitIdx=0;
+  document.getElementById('submitSetName').textContent=`${currentSet.name} · ${stageQueueIdx+1}/${stageQueue.length}단계`;
+  document.getElementById('submitStageLabel').textContent= stage===2?'2단계 · 모음만 가리고 단어써보기':'4단계 · 한글 제시어만 보고 영어로 써보기';
+  showPage('submitPracticePage');
+  updateScoreUI();
+  loadSubmitWord();
+  document.getElementById('submitInput').focus();
+}
+function loadSubmitWord(){
+  if(submitIdx>=submitQueue.length){ onStageFinished(); return; }
+  const w=submitQueue[submitIdx];
+  submitWrongThisWord=false;
+  const promptEl=document.getElementById('submitPromptWord');
+  promptEl.textContent = currentStage===2 ? maskVowels(w.text) : (w.meaning||'(뜻 없음)');
+  document.getElementById('submitFeedback').textContent='';
+  const inpEl=document.getElementById('submitInput');
+  inpEl.value='';inpEl.className='';
+  document.getElementById('submitProgressFill').style.width=(submitIdx/submitQueue.length*100)+'%';
+  document.getElementById('submitStatCorrect').textContent=sessionCorrectTotal;
+  document.getElementById('submitStatRemain').textContent=submitQueue.length-submitIdx;
+  inpEl.focus();
+}
+function submitAnswer(){
+  if(submitIdx>=submitQueue.length) return;
+  const w=submitQueue[submitIdx];
+  const inpEl=document.getElementById('submitInput');
+  const typed=inpEl.value.trim();
+  if(!typed) return;
+  const fb=document.getElementById('submitFeedback');
+  if(typed.toLowerCase()===w.text.toLowerCase()){
+    inpEl.className='correct';
+    fb.style.color='#22C55E';
+    fb.textContent='🎉 정답이에요!';
+    registerCorrect(!submitWrongThisWord);
+    submitIdx++;
+    setTimeout(loadSubmitWord,700);
+  }else{
+    inpEl.className='wrong';
+    fb.style.color='#EF4444';
+    fb.textContent=`❌ 아쉬워요! 입력: "${typed}" / 정답: "${w.text}"`;
+    submitWrongThisWord=true;
+    registerWrong();
+    inpEl.value='';inpEl.focus();
+  }
+}
+document.getElementById('submitInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();submitAnswer();}
+});
 
 /* ══════════════════════════════════════
    단어 로드
 ══════════════════════════════════════ */
 function loadWord(){
-  if(currentIdx>=practiceQueue.length){showResult();return;}
+  if(currentIdx>=practiceQueue.length){onStage13Done();return;}
+  updateScoreUI();
   const word=practiceQueue[currentIdx];
   const text=word.text;
   const isEn=currentSet.lang==='en';
@@ -971,6 +1426,7 @@ function checkInput(){
   if(typed===word){
     stopRepeatSpeak(); // 반복 중단
     correctCount++;
+    registerCorrect(true);
     updateStats();
     if(isEn){openMeaningPopup();}
     else{
@@ -994,6 +1450,7 @@ function handleEnter(){
   if(typed!==word){
     // ★ 틀림: 카운트 증가, 입력창 초기화, 같은 단어 다시 표시 ★
     wrongTotalCount++;
+    registerWrong();
     updateStats();
     isRetry=true;
 
@@ -1073,7 +1530,7 @@ function updateStats(){
 let adminLang='ko';
 function openAdmin(){document.getElementById('adminPwInput').value='';document.getElementById('adminPwError').textContent='';document.getElementById('adminModal').classList.add('show');setTimeout(()=>document.getElementById('adminPwInput').focus(),100);}
 document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
-function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
+function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();renderAdminStudentList();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
 function closeAdminModal(){document.getElementById('adminModal').classList.remove('show');}
 function setAdminLang(lang,btn){
   adminLang=lang;document.querySelectorAll('.lang-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
@@ -1253,6 +1710,15 @@ function init(){
     const homeIsActive=document.getElementById('homePage').classList.contains('active');
     if(homeIsActive) renderHome();
   });
+  loadStudentsFromCloud().then(()=>{
+    if(document.getElementById('homePage').classList.contains('active')) renderHome();
+    if(document.getElementById('adminPage').classList.contains('active')) renderAdminStudentList();
+  });
+  if(currentStudent){
+    loadProgressFromCloud(currentStudent).then(()=>{
+      if(document.getElementById('homePage').classList.contains('active')) updateStudentBar();
+    });
+  }
 }
 init();
 </script>
