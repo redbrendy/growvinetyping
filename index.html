@@ -1238,8 +1238,14 @@ async function openLeaderboard(){
   const cloud=await loadAllProgressFromCloud();
   const rows=students.map(name=>{
     const key=studentKey(name);
-    const data=cloud[key]||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
-    return {name,score:data.totalScore||0,badges:(data.badges||[]).length};
+    const cloudData=cloud[key]||null;
+    const localData=progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||null;
+    // ★ 버그 수정: 방금 이 기기에서 딴 점수가 클라우드에 반영되기 전(전송 중)에 순위를 열면
+    //   아직 예전 점수인 클라우드 값으로 덮어써져서 "점수가 안 바뀐 것처럼" 보이는 문제가 있었다.
+    //   점수는 항상 올라가기만 하므로, 클라우드/로컬 중 더 높은 값을 신뢰한다. ★
+    const score=Math.max(cloudData?.totalScore||0, localData?.totalScore||0);
+    const badgeSrc=(cloudData?.badges?.length||0) >= (localData?.badges?.length||0) ? cloudData : localData;
+    return {name,score,badges:(badgeSrc?.badges||[]).length};
   }).sort((a,b)=>b.score-a.score);
   list.innerHTML='';
   if(!rows.length){list.innerHTML='<p style="color:var(--muted);font-weight:700;">등록된 학생이 없어요 🐾</p>';return;}
