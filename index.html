@@ -763,6 +763,12 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     </div>
     <div id="adminStudentList" style="display:flex;flex-direction:column;gap:6px;"></div>
   </div>
+
+  <div class="card">
+    <div class="card-title">📊 학생 기록 보기 <span style="font-size:.78rem;color:var(--muted);font-weight:600;">(모든 기기 동기화)</span></div>
+    <button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;margin-bottom:10px;" onclick="renderAdminRecords()">🔄 새로고침</button>
+    <div id="adminRecordsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+  </div>
 </div>
 
 </main>
@@ -1377,7 +1383,7 @@ function beginStageFlow(idx){
 function buildStageQueue(set){
   const stages=[1];
   if(set.lang==='en') stages.push(2);
-  stages.push(3);
+  if(set.lang==='en') stages.push(3);
   const hasMeanings=set.words.some(w=>w.meaning&&w.meaning.trim());
   if(set.lang==='en'&&hasMeanings) stages.push(4);
   return stages;
@@ -1385,7 +1391,7 @@ function buildStageQueue(set){
 const STAGE_INFO={
   1:{emoji:'⌨️',name:'1단계',desc:'글자 따라 치기'},
   2:{emoji:'🔤',name:'2단계',desc:'모음 가리고 쓰기'},
-  3:{emoji:'⌨️',name:'3단계',desc:'글자 따라 치기(복습)'},
+  3:{emoji:'🔡',name:'3단계',desc:'자음 가리고 쓰기'},
   4:{emoji:'🇰🇷',name:'4단계',desc:'뜻 보고 영어 쓰기'}
 };
 /* ══════════════════════════════════════
@@ -1435,7 +1441,7 @@ function incrementStageCount(stage){
 function startStage(stage){
   currentStage=stage;
   closeAllWordLists();
-  if(stage===1||stage===3){
+  if(stage===1){
     practiceQueue=shuffle([...currentSet.words]);
     currentIdx=0;correctCount=0;wrongTotalCount=0;isRetry=false;
     popupStep=0;popupEnterCount=0;
@@ -1443,9 +1449,8 @@ function startStage(stage){
     showPage('practicePage');
     renderKeyboard(currentSet.lang==='ko'?'ko':'en');
     document.getElementById('speakBtn').style.display=currentSet.lang==='ko'?'none':'inline-flex';
-    // ★ 7번: 단어 목록 보기는 3단계에서만(1단계는 첫 학습이라 숨김) ★
-    document.getElementById('wordListToggleWrapP').style.display=stage===3?'block':'none';
-    if(stage===3) renderWordListPanel('wordListPanelP');
+    // ★ 7번: 단어 목록 보기는 1단계는 첫 학습이라 숨김 ★
+    document.getElementById('wordListToggleWrapP').style.display='none';
     updateScoreUI();
     loadWord();
     document.getElementById('typingInput').focus();
@@ -1477,11 +1482,13 @@ function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=~~(Math.random()*(
 ══════════════════════════════════════ */
 let submitQueue=[], submitIdx=0, submitWrongThisWord=false;
 function maskVowels(word){ return [...word].map(c=>/[aeiouAEIOU]/.test(c)?'_':c).join(''); }
+function maskConsonants(word){ return [...word].map(c=>/[a-zA-Z]/.test(c)?(/[aeiouAEIOU]/.test(c)?c:'_'):c).join(''); }
+const SUBMIT_STAGE_LABEL={2:'2단계 · 모음만 가리고 단어써보기',3:'3단계 · 자음만 가리고 단어써보기',4:'4단계 · 한글 제시어만 보고 영어로 써보기'};
 function startSubmitStage(stage){
   submitQueue=shuffle([...currentSet.words]);
   submitIdx=0;
   document.getElementById('submitSetName').textContent=`${currentSet.name} · ${stage}단계`;
-  document.getElementById('submitStageLabel').textContent= stage===2?'2단계 · 모음만 가리고 단어써보기':'4단계 · 한글 제시어만 보고 영어로 써보기';
+  document.getElementById('submitStageLabel').textContent= SUBMIT_STAGE_LABEL[stage]||'';
   showPage('submitPracticePage');
   renderWordListPanel('wordListPanelS');
   updateScoreUI();
@@ -1494,9 +1501,9 @@ function loadSubmitWord(){
   submitWrongThisWord=false;
   const promptEl=document.getElementById('submitPromptWord');
   const meaningEl=document.getElementById('submitMeaningHint');
-  promptEl.textContent = currentStage===2 ? maskVowels(w.text) : (w.meaning||'(뜻 없음)');
-  // ★ 5번: 2단계에서는 한글 뜻을 함께 보여주고, 발음을 반복 재생한다 ★
-  if(currentStage===2){
+  promptEl.textContent = currentStage===2 ? maskVowels(w.text) : currentStage===3 ? maskConsonants(w.text) : (w.meaning||'(뜻 없음)');
+  // ★ 5번: 2·3단계에서는 한글 뜻을 함께 보여주고, 발음을 반복 재생한다 ★
+  if(currentStage===2||currentStage===3){
     if(w.meaning&&w.meaning.trim()){meaningEl.textContent='💜 '+w.meaning;meaningEl.style.display='block';}
     else{meaningEl.style.display='none';}
     startRepeatSpeak(w.text);
@@ -1779,7 +1786,33 @@ function updateStats(){
 let adminLang='ko';
 function openAdmin(){document.getElementById('adminPwInput').value='';document.getElementById('adminPwError').textContent='';document.getElementById('adminModal').classList.add('show');setTimeout(()=>document.getElementById('adminPwInput').focus(),100);}
 document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
-function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();renderAdminStudentList();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
+function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();renderAdminStudentList();renderAdminRecords();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
+async function renderAdminRecords(){
+  const box=document.getElementById('adminRecordsList');
+  if(!box) return;
+  if(!students.length){box.innerHTML='<p style="color:var(--muted);font-weight:700;">등록된 학생이 없어요 🐾</p>';return;}
+  box.innerHTML='<p style="color:var(--muted);font-weight:700;">불러오는 중...</p>';
+  const cloud=await loadAllProgressFromCloud();
+  box.innerHTML='';
+  students.forEach(name=>{
+    const key=studentKey(name);
+    const p=cloud[key]||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
+    const lvl=Math.floor((p.totalScore||0)/100)+1;
+    const setRows=Object.keys(p.sets||{}).map(sn=>{
+      const s=p.sets[sn]||{};
+      const counts=s.stageCounts||{};
+      const stageStr=[1,2,3,4].map(st=>counts[st]?`${st}단계×${counts[st]}`:null).filter(Boolean).join(' · ')||'-';
+      return `<div style="font-size:.82rem;color:var(--ink);padding:2px 0;">📘 <strong>${sn}</strong> — 완료 ${s.timesCompleted||0}회 (${stageStr})</div>`;
+    }).join('')||'<div style="font-size:.82rem;color:var(--muted);">아직 연습 기록이 없어요</div>';
+    const wrap=document.createElement('div');
+    wrap.style.cssText='background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:12px 14px;';
+    wrap.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:6px;">
+        <span>🙋 ${name} · Lv.${lvl}</span>
+        <span style="color:var(--pk);">⭐${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개</span>
+      </div>${setRows}`;
+    box.appendChild(wrap);
+  });
+}
 function closeAdminModal(){document.getElementById('adminModal').classList.remove('show');}
 function setAdminLang(lang,btn){
   adminLang=lang;document.querySelectorAll('.lang-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
