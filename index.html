@@ -1114,17 +1114,22 @@ async function loadAllProgressFromCloud(){
   }catch(e){console.error('🔥 리더보드 불러오기 실패:',e);return {};}finally{clearTimeout(timer);}
 }
 
+// ★ 단계를 개별로 진행해도 점수가 누적되도록, 점수/콤보 반영 로직을 공용 함수로 분리 ★
+function commitSessionScore(p){
+  p.totalScore=(p.totalScore||0)+sessionScore;
+  p.maxCombo=Math.max(p.maxCombo||0,maxCombo);
+  if(!p.mascot) p.mascot={type:Math.random()<0.5?'cat':'dog',points:0};
+  p.mascot.points=p.totalScore;
+  return p;
+}
 function finishSet(){
   stopRepeatSpeak();
   const p=getProgress(currentStudent);
-  p.totalScore=(p.totalScore||0)+sessionScore;
-  p.maxCombo=Math.max(p.maxCombo||0,maxCombo);
+  commitSessionScore(p);
   p.sets=p.sets||{};
   p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0};
   p.sets[currentSet.name].timesCompleted++;
   if(stageQueue.includes(4)) p.completedAll4=true;
-  if(!p.mascot) p.mascot={type:Math.random()<0.5?'cat':'dog',points:0};
-  p.mascot.points=p.totalScore;
   const newBadges=awardBadges(p);
   saveProgress(currentStudent,p);
   showSetComplete(newBadges,p);
@@ -1469,9 +1474,19 @@ function onStage13Done(){ onStageFinished(); }
 function onStageFinished(){
   incrementStageCount(currentStage);
   if(singleStageMode){
-    showToast(`✅ ${currentStage}단계 완료!`);
+    // ★ 단계를 하나만 진행해도 그 단계에서 딴 점수/콤보/배지를 바로 저장한다 ★
+    const p=getProgress(currentStudent);
+    const earnedPts=sessionScore;
+    commitSessionScore(p);
+    p.sets=p.sets||{};
+    p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0};
+    const newBadges=awardBadges(p);
+    saveProgress(currentStudent,p);
+    updateStudentBar();
+    showToast(`✅ ${currentStage}단계 완료! (+${earnedPts}점)${newBadges.length?' 🎉 새 배지: '+newBadges.map(b=>b.emoji+b.name).join(', '):''}`);
     stopRepeatSpeak();
-    setTimeout(()=>showStageMenu(),900);
+    sessionScore=0;combo=0;maxCombo=0;sessionCorrectTotal=0;sessionWrongTotal=0;
+    setTimeout(()=>showStageMenu(),1100);
     return;
   }
   stageQueueIdx++;
@@ -1957,6 +1972,24 @@ function showToast(msg){
   clearTimeout(t._t);t._t=setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.style.display='none',300);},1800);
 }
 
+// ★ 데이터 유실 방지: 클라우드 데이터로 무조건 덮어쓰지 않고, 세트 이름 기준으로 "더 온전한(단어 수가 많은) 쪽"을 살려 병합한다.
+//   기기마다 로컬 데이터가 다를 때(예: 한쪽엔 세트가 있고 다른 쪽엔 없을 때) 어느 쪽에서 열어도 데이터가 사라지지 않도록 하기 위함. ★
+function mergeWordSets(localList, cloudList){
+  const byName = new Map();
+  (cloudList||[]).forEach(s=>{ if(s&&s.name) byName.set(s.name, s); });
+  (localList||[]).forEach(s=>{
+    if(!s||!s.name) return;
+    const existing = byName.get(s.name);
+    if(!existing || (s.words||[]).length > (existing.words||[]).length){
+      byName.set(s.name, s);
+    }
+  });
+  // 순서는 로컬 순서를 우선하고, 로컬에 없는(클라우드에만 있는) 세트는 뒤에 붙인다
+  const order=[];
+  (localList||[]).forEach(s=>{ if(s&&s.name&&byName.has(s.name)&&!order.includes(s.name)) order.push(s.name); });
+  (cloudList||[]).forEach(s=>{ if(s&&s.name&&byName.has(s.name)&&!order.includes(s.name)) order.push(s.name); });
+  return order.map(n=>byName.get(n));
+}
 async function loadWordSetsFromCloud(){
   if(!firebaseReady) return;
   const ctrl = new AbortController();
@@ -1966,8 +1999,12 @@ async function loadWordSetsFromCloud(){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
     if(Array.isArray(data) && data.length){
-      wordSets = data;
+      const merged = mergeWordSets(wordSets, data);
+      const changed = JSON.stringify(merged)!==JSON.stringify(data);
+      wordSets = merged;
       localStorage.setItem('typingSets',JSON.stringify(wordSets));
+      // 병합 결과가 클라우드와 다르면(즉 로컬에만 있던 데이터를 되살렸다면) 클라우드도 최신 상태로 갱신
+      if(changed) saveWordSets();
     }
   }catch(e){
     console.error('🔥 Firebase 불러오기 실패, 로컬 데이터를 사용합니다:', e);
