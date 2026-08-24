@@ -116,10 +116,10 @@ main{flex:1;display:flex;flex-direction:column;padding:14px 13px 8px;gap:11px;ma
 /* 입력창 */
 .input-area{display:flex;justify-content:center;padding:2px 8px 4px;}
 .input-wrap{position:relative;width:100%;max-width:480px;}
-#typingInput{font-size:1.6rem;font-weight:800;padding:11px 20px;border:3px solid var(--border);border-radius:18px;width:100%;outline:none;text-align:center;background:#FFF;transition:all .18s;font-family:inherit;color:var(--text);letter-spacing:3px;}
-#typingInput:focus{border-color:var(--pk);box-shadow:0 0 0 4px rgba(255,143,171,.15);}
-#typingInput.correct{border-color:#22C55E;background:#F0FDF4;box-shadow:0 0 0 4px rgba(34,197,94,.15);}
-#typingInput.wrong{border-color:#EF4444;background:#FEF2F2;box-shadow:0 0 0 4px rgba(239,68,68,.15);animation:shake .3s;}
+#typingInput,#submitInput{font-size:1.6rem;font-weight:800;padding:11px 20px;border:3px solid var(--border);border-radius:18px;width:100%;outline:none;text-align:center;background:#FFF;transition:all .18s;font-family:inherit;color:var(--text);letter-spacing:3px;}
+#typingInput:focus,#submitInput:focus{border-color:var(--pk);box-shadow:0 0 0 4px rgba(255,143,171,.15);}
+#typingInput.correct,#submitInput.correct{border-color:#22C55E;background:#F0FDF4;box-shadow:0 0 0 4px rgba(34,197,94,.15);}
+#typingInput.wrong,#submitInput.wrong{border-color:#EF4444;background:#FEF2F2;box-shadow:0 0 0 4px rgba(239,68,68,.15);animation:shake .3s;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
 #spaceOverlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:1.6rem;font-weight:800;letter-spacing:3px;padding:11px 20px;white-space:pre;overflow:hidden;}
 .space-dot{display:inline-block;color:#C8A2F0;font-size:1.2em;line-height:1;opacity:.85;font-weight:900;}
@@ -257,6 +257,32 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 .leaderboard-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:9px 15px;font-weight:700;}
 .leaderboard-row.me{border-color:var(--pk);background:#FFF0F5;}
 .student-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+
+/* ── 단계 선택 메뉴 ── */
+.stage-menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:6px;}
+.stage-btn{position:relative;background:linear-gradient(135deg,#FFF5F8 0%,#F5EEFF 100%);border:2.5px solid var(--border);border-radius:20px;padding:20px 12px 16px;cursor:pointer;text-align:center;transition:all .2s;font-family:inherit;}
+.stage-btn:hover{border-color:var(--pk);transform:translateY(-4px);box-shadow:0 8px 20px rgba(255,143,171,.25);}
+.stage-btn .stage-emoji{font-size:2rem;margin-bottom:6px;}
+.stage-btn .stage-name{font-size:.95rem;font-weight:900;color:var(--text);}
+.stage-btn .stage-desc{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:3px;}
+.stage-count-badge{position:absolute;top:-10px;right:-10px;background:linear-gradient(135deg,#FF6B6B,#FF8E53);color:#fff;border-radius:50%;min-width:30px;height:30px;padding:0 4px;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:900;box-shadow:0 3px 8px rgba(255,107,107,.4);border:2.5px solid #fff;}
+.stage-count-badge.zero{background:linear-gradient(135deg,#C9C9C9,#A8A8A8);}
+
+/* ── 단어 목록 토글 ── */
+.wordlist-toggle-btn{background:var(--lv2);border:2px dashed var(--lv);color:#5B3BA0;border-radius:14px;padding:7px 16px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:inherit;transition:all .15s;}
+.wordlist-toggle-btn:hover{background:var(--lv);color:#fff;}
+.wordlist-panel{display:none;margin-top:10px;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:10px 14px;max-height:200px;overflow-y:auto;}
+.wordlist-panel.open{display:block;}
+.wordlist-panel .wl-row{display:flex;justify-content:space-between;gap:10px;padding:4px 2px;font-weight:700;font-size:.88rem;border-bottom:1px dashed var(--border);}
+.wordlist-panel .wl-row:last-child{border-bottom:none;}
+.wordlist-panel .wl-meaning{color:var(--muted);}
+
+/* ── 마스코트 선택기 ── */
+.mascot-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px;margin-top:10px;}
+.mascot-pick-item{background:var(--bg2);border:2.5px solid var(--border);border-radius:16px;padding:8px 4px;text-align:center;cursor:pointer;transition:all .15s;}
+.mascot-pick-item:hover{border-color:var(--pk);transform:translateY(-2px);}
+.mascot-pick-item.sel{border-color:var(--pk);background:#FFF0F5;box-shadow:0 0 0 3px rgba(255,143,171,.2);}
+.mascot-pick-item .mp-name{font-size:.68rem;font-weight:800;color:var(--muted);margin-top:2px;}
 
 @media(max-width:600px){
   .key{min-width:28px;height:30px;font-size:.68rem;}.key.space-key{min-width:105px;}
@@ -448,6 +474,18 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
   </div>
 </div>
 
+<!-- ══ 단계 선택 메뉴 ══ -->
+<div id="stageMenuPage" class="page">
+  <div class="card">
+    <div class="card-title" id="stageMenuTitle">📚 단계를 골라보세요!</div>
+    <div id="stageMenuGrid" class="stage-menu-grid"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+      <button class="btn btn-primary" onclick="startSequentialFlow()">🚀 처음부터 순서대로 진행</button>
+      <button class="btn btn-ghost btn-sm" style="background:var(--bg2);color:var(--text);" onclick="goHome()">🏠 취소하고 홈으로</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 제출형 연습(2/4단계) ══ -->
 <div id="submitPracticePage" class="page">
   <div class="card" style="padding:11px 16px;">
@@ -466,6 +504,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div class="prompt-area">
       <div class="prompt-label" id="submitStageLabel">2단계</div>
       <div class="prompt-word" id="submitPromptWord" style="font-size:2.6rem;"></div>
+      <div id="submitMeaningHint" style="font-size:1.1rem;font-weight:800;color:var(--lv);margin-top:4px;display:none;"></div>
     </div>
     <div class="input-area">
       <div class="input-wrap">
@@ -476,6 +515,10 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div id="submitFeedback" style="text-align:center;font-weight:800;margin-top:8px;min-height:26px;"></div>
     <div style="display:flex;justify-content:center;margin-top:8px;">
       <button class="btn btn-primary" onclick="submitAnswer()">제출 ↵</button>
+    </div>
+    <div style="text-align:center;margin-top:12px;">
+      <button class="wordlist-toggle-btn" id="wordListBtnS" onclick="toggleWordList('wordListBtnS','wordListPanelS')">📋 단어 목록 보기</button>
+      <div class="wordlist-panel" id="wordListPanelS"></div>
     </div>
   </div>
 </div>
@@ -534,6 +577,10 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     </div>
     <div id="spaceHint" style="display:none;text-align:center;font-size:.8rem;color:var(--lv);font-weight:700;margin-top:3px;">
       💜 보라색 · 는 띄어쓰기예요!
+    </div>
+    <div style="text-align:center;margin-top:10px;" id="wordListToggleWrapP">
+      <button class="wordlist-toggle-btn" id="wordListBtnP" onclick="toggleWordList('wordListBtnP','wordListPanelP')">📋 단어 목록 보기</button>
+      <div class="wordlist-panel" id="wordListPanelP"></div>
     </div>
   </div>
 
@@ -743,6 +790,16 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
   </div>
 </div>
 
+<!-- 마스코트 선택 -->
+<div class="popup-overlay" id="mascotPickerModal">
+  <div class="popup-box" style="max-width:420px;">
+    <span class="popup-emoji">🐾</span>
+    <div class="popup-stage-title" style="font-size:1.1rem;margin-bottom:4px;">캐릭터를 골라보세요!</div>
+    <div class="mascot-picker-grid" id="mascotPickerGrid"></div>
+    <button class="btn btn-sm" style="background:var(--bg2);margin-top:16px;" onclick="closeMascotPicker()">닫기</button>
+  </div>
+</div>
+
 <!-- 관리자 비밀번호 -->
 <div class="popup-overlay" id="adminModal">
   <div class="popup-box" style="max-width:310px;">
@@ -825,6 +882,13 @@ function toggleFullscreen(){
   }else{
     const exit=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
     if(exit) exit.call(document);
+  }
+}
+function enterFullscreenIfNeeded(){
+  if(!document.fullscreenElement){
+    const el=document.documentElement;
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+    if(req) req.call(el).catch(()=>{});
   }
 }
 function updateFullscreenBtn(){
@@ -943,6 +1007,68 @@ function flashCombo(){
   });
 }
 
+/* ══════════════════════════════════════
+   🐾 마스코트 12종 — 젤리 스타일 SVG 생성기
+══════════════════════════════════════ */
+const MASCOT_TYPES=[
+  {id:'dog',emoji:'🐶',name:'멍멍이',body:['#FFEBCF','#FFC98F'],ear:['#FFDBAE','#F3B26C'],ears:'floppy'},
+  {id:'cat',emoji:'🐱',name:'냥냥이',body:['#F2E7FF','#C9A8F0'],ear:['#E7D2FB','#B98FE8'],ears:'pointy'},
+  {id:'rabbit',emoji:'🐰',name:'토끼',body:['#FFF5F5','#FFD1DC'],ear:['#FFE4EC','#FFB6C8'],ears:'long'},
+  {id:'bear',emoji:'🐻',name:'곰돌이',body:['#F5E6D8','#C89666'],ear:['#EAD3B8','#B98452'],ears:'round'},
+  {id:'panda',emoji:'🐼',name:'판다',body:['#FFFFFF','#EDEDED'],ear:['#4A4A4A','#2E2E2E'],ears:'round'},
+  {id:'fox',emoji:'🦊',name:'여우',body:['#FFDCB0','#FF9F5A'],ear:['#FFC088','#FF8A3D'],ears:'pointy'},
+  {id:'penguin',emoji:'🐧',name:'펭귄',body:['#EAF6FF','#B9DCF0'],ear:['#3A3A50','#22222E'],ears:'none'},
+  {id:'chick',emoji:'🐤',name:'병아리',body:['#FFF9C4','#FFE066'],ear:['#FFD34D','#FFB300'],ears:'none'},
+  {id:'pig',emoji:'🐷',name:'꿀꿀이',body:['#FFE3EC','#FFB3C6'],ear:['#FFCFDF','#FF9CB8'],ears:'round'},
+  {id:'unicorn',emoji:'🦄',name:'유니콘',body:['#FFFFFF','#F0E4FF'],ear:['#E8D5FF','#C8A2F0'],ears:'pointy',horn:true},
+  {id:'dinosaur',emoji:'🦖',name:'공룡',body:['#E8FFEA','#A8E6A3'],ear:['#C8F5C4','#8FD98A'],ears:'none',spikes:true},
+  {id:'hamster',emoji:'🐹',name:'햄스터',body:['#FFF0DB','#FFD9A0'],ear:['#FFE4C0','#FFC680'],ears:'round'}
+];
+function getMascotDef(type){ return MASCOT_TYPES.find(m=>m.id===type)||MASCOT_TYPES[0]; }
+function mascotSVG(type,size,uid){
+  const m=getMascotDef(type);
+  const bId='mb_'+uid, eId='me_'+uid;
+  let ears='';
+  if(m.ears==='floppy'){
+    ears=`<ellipse cx="100" cy="80" rx="10" ry="14" fill="url(#${eId})" transform="rotate(35 100 80)"/>
+      <ellipse cx="27" cy="42" rx="15" ry="21" fill="url(#${eId})" transform="rotate(-18 27 42)"/>
+      <ellipse cx="93" cy="42" rx="15" ry="21" fill="url(#${eId})" transform="rotate(18 93 42)"/>`;
+  }else if(m.ears==='pointy'){
+    ears=`<path d="M22 46 Q18 18 40 32 Q34 42 30 50Z" fill="url(#${eId})"/>
+      <path d="M98 46 Q102 18 80 32 Q86 42 90 50Z" fill="url(#${eId})"/>`;
+  }else if(m.ears==='long'){
+    ears=`<ellipse cx="34" cy="22" rx="9" ry="28" fill="url(#${eId})" transform="rotate(-8 34 22)"/>
+      <ellipse cx="86" cy="22" rx="9" ry="28" fill="url(#${eId})" transform="rotate(8 86 22)"/>
+      <ellipse cx="34" cy="24" rx="4.5" ry="20" fill="#FFF" opacity=".5" transform="rotate(-8 34 24)"/>
+      <ellipse cx="86" cy="24" rx="4.5" ry="20" fill="#FFF" opacity=".5" transform="rotate(8 86 24)"/>`;
+  }else if(m.ears==='round'){
+    ears=`<circle cx="27" cy="34" r="16" fill="url(#${eId})"/>
+      <circle cx="93" cy="34" r="16" fill="url(#${eId})"/>`;
+  }
+  let extra='';
+  if(m.horn){extra+=`<path d="M60 20 L66 44 L54 44Z" fill="#FFE066"/><path d="M60 20 L64 34 L56 34Z" fill="#FFD34D"/>`;}
+  if(m.spikes){extra+=`<path d="M40 24 L46 12 L50 26 M56 20 L60 8 L64 20 M70 24 L76 12 L78 27" fill="url(#${eId})"/>`;}
+  return `<svg width="${size}" height="${size*1.09}" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="${bId}" cx="35%" cy="28%" r="75%"><stop offset="0%" stop-color="${m.body[0]}"/><stop offset="100%" stop-color="${m.body[1]}"/></radialGradient>
+      <radialGradient id="${eId}" cx="35%" cy="28%" r="75%"><stop offset="0%" stop-color="${m.ear[0]}"/><stop offset="100%" stop-color="${m.ear[1]}"/></radialGradient>
+    </defs>
+    ${ears}${extra}
+    <ellipse cx="40" cy="106" rx="11" ry="8" fill="url(#${bId})"/>
+    <ellipse cx="80" cy="106" rx="11" ry="8" fill="url(#${bId})"/>
+    <ellipse cx="60" cy="62" rx="43" ry="41" fill="url(#${bId})"/>
+    <ellipse cx="42" cy="38" rx="16" ry="10" fill="#FFFFFF" opacity=".4" transform="rotate(-25 42 38)"/>
+    <ellipse cx="60" cy="74" rx="16" ry="12" fill="#FFFFFF" opacity=".55"/>
+    <ellipse cx="33" cy="70" rx="6.5" ry="4" fill="#FF9EB5" opacity=".55"/>
+    <ellipse cx="87" cy="70" rx="6.5" ry="4" fill="#FF9EB5" opacity=".55"/>
+    <ellipse cx="45" cy="55" rx="6" ry="7" fill="#3A2A45"/>
+    <ellipse cx="42.7" cy="51.5" rx="2" ry="2.4" fill="#fff"/>
+    <ellipse cx="75" cy="55" rx="6" ry="7" fill="#3A2A45"/>
+    <ellipse cx="72.7" cy="51.5" rx="2" ry="2.4" fill="#fff"/>
+    <path d="M52 78 Q60 84 68 78" stroke="#8A5EA8" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+
 function studentKey(name){ return encodeURIComponent(name).replace(/[.#$\[\]]/g,'_'); }
 function defaultProgress(){ return {totalScore:0,badges:[],sets:{},maxCombo:0,mascot:null,completedAll4:false}; }
 function getProgress(name){
@@ -1010,7 +1136,7 @@ function showSetComplete(newBadges,p){
   document.getElementById('reTotal').textContent=currentSet.words.length;
   document.getElementById('reScore').textContent=sessionScore;
   const lvl=Math.floor((p.totalScore||0)/100)+1;
-  document.getElementById('reMascotLine').innerHTML=`${p.mascot.type==='dog'?'🐶':'🐱'} 캐릭터 레벨 <strong>Lv.${lvl}</strong> (${'⭐'.repeat(Math.min(lvl,10))})`;
+  document.getElementById('reMascotLine').innerHTML=`${getMascotDef(p.mascot.type).emoji} 캐릭터 레벨 <strong>Lv.${lvl}</strong> (${'⭐'.repeat(Math.min(lvl,10))})`;
   document.getElementById('reBadgesNew').innerHTML=newBadges.length?('🎉 새 배지 획득! '+newBadges.map(b=>`${b.emoji} ${b.name}`).join(' · ')):'';
   showPage('resultPage');
 }
@@ -1021,7 +1147,7 @@ function updateStudentBar(){
   if(!currentStudent){el.textContent='🙋 먼저 학생을 선택해 주세요!';return;}
   const p=getProgress(currentStudent);
   const lvl=Math.floor((p.totalScore||0)/100)+1;
-  const emoji=(p.mascot&&p.mascot.type==='dog')?'🐶':'🐱';
+  const emoji=getMascotDef(p.mascot&&p.mascot.type).emoji;
   el.innerHTML=`${emoji} <strong>${currentStudent}</strong> · Lv.${lvl} · ⭐${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개`;
 }
 
@@ -1034,10 +1160,10 @@ function renderBadgesPage(){
   const lvl=Math.floor((p.totalScore||0)/100)+1;
   const type=(p.mascot&&p.mascot.type)||'cat';
   document.getElementById('mascotGrowthArea').innerHTML=
-    `<div style="font-size:3rem;">${type==='dog'?'🐶':'🐱'}</div>`+
+    `<div>${mascotSVG(type,90,'badgehome')}</div>`+
     `<div style="font-weight:900;font-size:1.2rem;color:var(--pk);">${currentStudent} · Lv.${lvl}</div>`+
     `<div style="color:var(--muted);font-weight:700;">⭐ ${p.totalScore||0}점 · ${'⭐'.repeat(Math.min(lvl,10))}</div>`+
-    `<div style="margin-top:8px;"><button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="switchMascot()">🔄 캐릭터 바꾸기</button></div>`;
+    `<div style="margin-top:8px;"><button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="openMascotPicker()">🔄 캐릭터 바꾸기</button></div>`;
   const grid=document.getElementById('badgeGrid');grid.innerHTML='';
   BADGES.forEach(b=>{
     const got=(p.badges||[]).includes(b.id);
@@ -1046,12 +1172,28 @@ function renderBadgesPage(){
     grid.appendChild(chip);
   });
 }
-function switchMascot(){
+function openMascotPicker(){
+  const p=getProgress(currentStudent);
+  const curType=(p.mascot&&p.mascot.type)||'cat';
+  const grid=document.getElementById('mascotPickerGrid');grid.innerHTML='';
+  MASCOT_TYPES.forEach((m,i)=>{
+    const item=document.createElement('div');
+    item.className='mascot-pick-item'+(m.id===curType?' sel':'');
+    item.innerHTML=`${mascotSVG(m.id,60,'pick'+i)}<div class="mp-name">${m.emoji} ${m.name}</div>`;
+    item.onclick=()=>selectMascot(m.id);
+    grid.appendChild(item);
+  });
+  document.getElementById('mascotPickerModal').classList.add('show');
+}
+function closeMascotPicker(){ document.getElementById('mascotPickerModal').classList.remove('show'); }
+function selectMascot(type){
   const p=getProgress(currentStudent);
   p.mascot=p.mascot||{type:'cat',points:p.totalScore||0};
-  p.mascot.type=p.mascot.type==='dog'?'cat':'dog';
+  p.mascot.type=type;
   saveProgress(currentStudent,p);
+  closeMascotPicker();
   renderBadgesPage();updateStudentBar();
+  showToast('🐾 캐릭터가 바뀌었어요!');
 }
 
 async function openLeaderboard(){
@@ -1200,6 +1342,7 @@ let pendingSetIdx=null;
 let stageQueue=[], stageQueueIdx=0, currentStage=1;
 
 function onWordSetClick(idx){
+  enterFullscreenIfNeeded();
   pendingSetIdx=idx;
   if(!currentStudent){ showStudentPicker(); return; }
   beginStageFlow(idx);
@@ -1225,12 +1368,11 @@ function selectStudent(name){
   });
 }
 
+let singleStageMode=false;
 function beginStageFlow(idx){
   currentSet=wordSets[idx];
   sessionScore=0;combo=0;maxCombo=0;sessionCorrectTotal=0;sessionWrongTotal=0;
-  stageQueue=buildStageQueue(currentSet);
-  stageQueueIdx=0;
-  startStage(stageQueue[0]);
+  showStageMenu();
 }
 function buildStageQueue(set){
   const stages=[1];
@@ -1240,16 +1382,70 @@ function buildStageQueue(set){
   if(set.lang==='en'&&hasMeanings) stages.push(4);
   return stages;
 }
+const STAGE_INFO={
+  1:{emoji:'⌨️',name:'1단계',desc:'글자 따라 치기'},
+  2:{emoji:'🔤',name:'2단계',desc:'모음 가리고 쓰기'},
+  3:{emoji:'⌨️',name:'3단계',desc:'글자 따라 치기(복습)'},
+  4:{emoji:'🇰🇷',name:'4단계',desc:'뜻 보고 영어 쓰기'}
+};
+/* ══════════════════════════════════════
+   ★ 1번: 단계 선택 메뉴 — 자유롭게 원하는 단계로 진입 ★
+   ★ 2번: 단계별 완료 횟수를 동그란 배지로 표시 ★
+══════════════════════════════════════ */
+function showStageMenu(){
+  const allStages=buildStageQueue(currentSet);
+  document.getElementById('stageMenuTitle').textContent=`📚 ${currentSet.name} — 단계를 골라보세요!`;
+  const p=getProgress(currentStudent);
+  const setProg=(p.sets&&p.sets[currentSet.name])||{};
+  const counts=setProg.stageCounts||{};
+  const grid=document.getElementById('stageMenuGrid');grid.innerHTML='';
+  allStages.forEach(stage=>{
+    const info=STAGE_INFO[stage];
+    const cnt=counts[stage]||0;
+    const btn=document.createElement('div');btn.className='stage-btn';
+    btn.innerHTML=`<span class="stage-count-badge${cnt===0?' zero':''}">${cnt}</span>
+      <div class="stage-emoji">${info.emoji}</div>
+      <div class="stage-name">${info.name}</div>
+      <div class="stage-desc">${info.desc}</div>`;
+    btn.onclick=()=>startSingleStage(stage);
+    grid.appendChild(btn);
+  });
+  showPage('stageMenuPage');
+}
+function startSingleStage(stage){
+  singleStageMode=true;
+  stageQueue=[stage];stageQueueIdx=0;
+  startStage(stage);
+}
+function startSequentialFlow(){
+  singleStageMode=false;
+  stageQueue=buildStageQueue(currentSet);
+  stageQueueIdx=0;
+  startStage(stageQueue[0]);
+}
+function incrementStageCount(stage){
+  if(!currentStudent) return;
+  const p=getProgress(currentStudent);
+  p.sets=p.sets||{};
+  p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0,stageCounts:{}};
+  p.sets[currentSet.name].stageCounts=p.sets[currentSet.name].stageCounts||{};
+  p.sets[currentSet.name].stageCounts[stage]=(p.sets[currentSet.name].stageCounts[stage]||0)+1;
+  saveProgress(currentStudent,p);
+}
 function startStage(stage){
   currentStage=stage;
+  closeAllWordLists();
   if(stage===1||stage===3){
     practiceQueue=shuffle([...currentSet.words]);
     currentIdx=0;correctCount=0;wrongTotalCount=0;isRetry=false;
     popupStep=0;popupEnterCount=0;
-    document.getElementById('practiceSetName').textContent=`${currentSet.name} · ${stageQueueIdx+1}/${stageQueue.length}단계`;
+    document.getElementById('practiceSetName').textContent=`${currentSet.name} · ${stage}단계`;
     showPage('practicePage');
     renderKeyboard(currentSet.lang==='ko'?'ko':'en');
     document.getElementById('speakBtn').style.display=currentSet.lang==='ko'?'none':'inline-flex';
+    // ★ 7번: 단어 목록 보기는 3단계에서만(1단계는 첫 학습이라 숨김) ★
+    document.getElementById('wordListToggleWrapP').style.display=stage===3?'block':'none';
+    if(stage===3) renderWordListPanel('wordListPanelP');
     updateScoreUI();
     loadWord();
     document.getElementById('typingInput').focus();
@@ -1259,6 +1455,13 @@ function startStage(stage){
 }
 function onStage13Done(){ onStageFinished(); }
 function onStageFinished(){
+  incrementStageCount(currentStage);
+  if(singleStageMode){
+    showToast(`✅ ${currentStage}단계 완료!`);
+    stopRepeatSpeak();
+    setTimeout(()=>showStageMenu(),900);
+    return;
+  }
   stageQueueIdx++;
   if(stageQueueIdx<stageQueue.length){
     showToast(`✅ ${currentStage}단계 완료! 다음 단계로 이동해요`);
@@ -1277,9 +1480,10 @@ function maskVowels(word){ return [...word].map(c=>/[aeiouAEIOU]/.test(c)?'_':c)
 function startSubmitStage(stage){
   submitQueue=shuffle([...currentSet.words]);
   submitIdx=0;
-  document.getElementById('submitSetName').textContent=`${currentSet.name} · ${stageQueueIdx+1}/${stageQueue.length}단계`;
+  document.getElementById('submitSetName').textContent=`${currentSet.name} · ${stage}단계`;
   document.getElementById('submitStageLabel').textContent= stage===2?'2단계 · 모음만 가리고 단어써보기':'4단계 · 한글 제시어만 보고 영어로 써보기';
   showPage('submitPracticePage');
+  renderWordListPanel('wordListPanelS');
   updateScoreUI();
   loadSubmitWord();
   document.getElementById('submitInput').focus();
@@ -1289,7 +1493,17 @@ function loadSubmitWord(){
   const w=submitQueue[submitIdx];
   submitWrongThisWord=false;
   const promptEl=document.getElementById('submitPromptWord');
+  const meaningEl=document.getElementById('submitMeaningHint');
   promptEl.textContent = currentStage===2 ? maskVowels(w.text) : (w.meaning||'(뜻 없음)');
+  // ★ 5번: 2단계에서는 한글 뜻을 함께 보여주고, 발음을 반복 재생한다 ★
+  if(currentStage===2){
+    if(w.meaning&&w.meaning.trim()){meaningEl.textContent='💜 '+w.meaning;meaningEl.style.display='block';}
+    else{meaningEl.style.display='none';}
+    startRepeatSpeak(w.text);
+  }else{
+    meaningEl.style.display='none';
+    stopRepeatSpeak();
+  }
   document.getElementById('submitFeedback').textContent='';
   const inpEl=document.getElementById('submitInput');
   inpEl.value='';inpEl.className='';
@@ -1311,11 +1525,13 @@ function submitAnswer(){
     fb.textContent='🎉 정답이에요!';
     registerCorrect(!submitWrongThisWord);
     submitIdx++;
+    stopRepeatSpeak();
     setTimeout(loadSubmitWord,700);
   }else{
+    // ★ 6번 버그 수정: 틀렸을 때 정답을 미리 보여주지 않는다 ★
     inpEl.className='wrong';
     fb.style.color='#EF4444';
-    fb.textContent=`❌ 아쉬워요! 입력: "${typed}" / 정답: "${w.text}"`;
+    fb.textContent='❌ 아쉬워요! 다시 한 번 써 보세요';
     submitWrongThisWord=true;
     registerWrong();
     inpEl.value='';inpEl.focus();
@@ -1323,6 +1539,10 @@ function submitAnswer(){
 }
 document.getElementById('submitInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();submitAnswer();}
+});
+/* ★ 8번: 입력에 집중하면 단어 목록 토글을 자동으로 접는다 ★ */
+document.getElementById('submitInput').addEventListener('focus',()=>{
+  closeWordList('wordListBtnS','wordListPanelS');
 });
 
 /* ══════════════════════════════════════
@@ -1367,6 +1587,33 @@ function loadWord(){
   }
 }
 
+/* ══════════════════════════════════════
+   ★ 7번/8번: 단어 목록 보기 토글 (2~4단계) ★
+   - 기본은 접힌 상태
+   - 입력창에 포커스가 가면 자동으로 접혀서 계속 열어두고 커닝하는 것을 막는다
+══════════════════════════════════════ */
+function renderWordListPanel(panelId){
+  const panel=document.getElementById(panelId);
+  if(!panel||!currentSet) return;
+  panel.innerHTML=currentSet.words.map(w=>
+    `<div class="wl-row"><span>${w.text}</span>${w.meaning?`<span class="wl-meaning">${w.meaning}</span>`:''}</div>`
+  ).join('');
+}
+function toggleWordList(btnId,panelId){
+  const panel=document.getElementById(panelId);
+  if(!panel) return;
+  if(!panel.classList.contains('open')) renderWordListPanel(panelId);
+  panel.classList.toggle('open');
+}
+function closeWordList(btnId,panelId){
+  const panel=document.getElementById(panelId);
+  if(panel) panel.classList.remove('open');
+}
+function closeAllWordLists(){
+  closeWordList('wordListBtnP','wordListPanelP');
+  closeWordList('wordListBtnS','wordListPanelS');
+}
+
 /* ── 스페이스 오버레이 ── */
 function updateSpaceOverlay(typed){
   const ov=document.getElementById('spaceOverlay');ov.innerHTML='';
@@ -1390,6 +1637,8 @@ inp.addEventListener('keydown',e=>{
   //   (팝업이 없을 때는 스페이스가 단어 안의 띄어쓰기로 쓰이므로 그대로 입력되게 둔다)
   if(e.key===' ' && popupStep>0){e.preventDefault();handleEnter();}
 });
+/* ★ 8번: 입력에 집중하면 단어 목록 토글을 자동으로 접는다 ★ */
+inp.addEventListener('focus',()=>{ closeWordList('wordListBtnP','wordListPanelP'); });
 
 /* ══════════════════════════════════════
    ★ 1번: 틀리면 입력창 초기화 후 같은 단어 재시도
