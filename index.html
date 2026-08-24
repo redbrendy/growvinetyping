@@ -907,6 +907,27 @@ document.addEventListener('fullscreenchange', updateFullscreenBtn);
 document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
 
 /* ══════════════════════════════════════
+   ★ 전체화면 상태에서 태블릿 소프트 키보드가 뜰 때
+   키보드가이드/손가락가이드/입력칸이 가려지지 않도록,
+   화면(visualViewport)이 줄어들면 입력칸이 보이는 위치로 스크롤한다 ★
+══════════════════════════════════════ */
+function scrollGuideIntoView(){
+  const active=document.activeElement;
+  if(active && (active.id==='typingInput' || active.id==='submitInput')){
+    active.scrollIntoView({block:'center', behavior:'smooth'});
+  }
+}
+if(window.visualViewport){
+  let vvResizeTimer=null;
+  window.visualViewport.addEventListener('resize', ()=>{
+    clearTimeout(vvResizeTimer);
+    vvResizeTimer=setTimeout(scrollGuideIntoView, 120);
+  });
+}
+document.getElementById('typingInput')?.addEventListener('focus', ()=>setTimeout(scrollGuideIntoView,250));
+document.getElementById('submitInput')?.addEventListener('focus', ()=>setTimeout(scrollGuideIntoView,250));
+
+/* ══════════════════════════════════════
    데이터 & 상태
 ══════════════════════════════════════ */
 const ADMIN_PW='1234';
@@ -1162,9 +1183,12 @@ function updateStudentBar(){
   el.innerHTML=`${emoji} <strong>${currentStudent}</strong> · Lv.${lvl} · ⭐${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개`;
 }
 
-function openBadgesPage(){
+async function openBadgesPage(){
   if(!currentStudent){showToast('🙋 먼저 학생을 선택해 주세요!');showStudentPicker();return;}
   showPage('badgesPage');renderBadgesPage();
+  // ★ 다른 기기에서 딴 점수/배지가 바로 보이도록 클라우드에서 다시 불러와 새로고침 ★
+  await loadProgressFromCloud(currentStudent);
+  if(document.getElementById('badgesPage').classList.contains('active')){ renderBadgesPage(); updateStudentBar(); }
 }
 function renderBadgesPage(){
   const p=getProgress(currentStudent);
@@ -1410,9 +1434,12 @@ const STAGE_INFO={
    ★ 1번: 단계 선택 메뉴 — 자유롭게 원하는 단계로 진입 ★
    ★ 2번: 단계별 완료 횟수를 동그란 배지로 표시 ★
 ══════════════════════════════════════ */
-function showStageMenu(){
+async function showStageMenu(){
+  // ★ 다른 기기에서 쌓은 점수/완료 횟수가 바로 보이도록 매번 클라우드에서 최신 기록을 다시 불러온다 ★
+  await loadProgressFromCloud(currentStudent);
   const allStages=buildStageQueue(currentSet);
   document.getElementById('stageMenuTitle').textContent=`📚 ${currentSet.name} — 단계를 골라보세요!`;
+  updateStudentBar();
   const p=getProgress(currentStudent);
   const setProg=(p.sets&&p.sets[currentSet.name])||{};
   const counts=setProg.stageCounts||{};
@@ -1658,8 +1685,14 @@ function updateSpaceOverlay(typed){
 /* ── 입력 이벤트 ── */
 const inp=document.getElementById('typingInput');
 inp.addEventListener('compositionstart',()=>{isComposing=true;});
-inp.addEventListener('compositionend',()=>{isComposing=false;checkInput();});
-inp.addEventListener('input',()=>{if(!isComposing){updateSpaceOverlay(inp.value);checkInput();}});
+inp.addEventListener('compositionend',()=>{isComposing=false;updateSpaceOverlay(inp.value);checkInput();});
+// ★ 버그 수정: 일부 태블릿/안드로이드 키보드에서 compositionend 이벤트가 제때 오지 않아
+//   isComposing이 계속 true로 남아있는 경우가 있었고, 그 동안은 input 이벤트를 무시해서
+//   "글자를 맞게 쳤는데도 가이드가 다음 글자로 넘어가지 않는" 문제가 생겼다.
+//   한글 조합 중에도 매번 checkInput을 실행하도록 바꿔서, 특정 키보드의 이벤트 오류에
+//   가이드가 멈추지 않도록 한다(조합 중 잠깐 틀림으로 표시됐다가 바로 정정되는 정도의
+//   부작용만 있고, 실제 채점/가이드는 항상 최신 입력 기준으로 정확히 갱신된다). ★
+inp.addEventListener('input',()=>{updateSpaceOverlay(inp.value);checkInput();});
 inp.addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();handleEnter();return;}
   // ★ 뜻 팝업이 떠 있을 때는 스페이스바로도 다음 단계/다음 단어로 넘어갈 수 있게 한다.
@@ -1692,7 +1725,12 @@ function checkInput(){
   }
 
   // 키 하이라이트
-  const next=word[typed.length];
+  // ★ 버그 수정: typed.length 기준이 아니라, 실제로 정답과 일치하는 부분까지의 길이를 기준으로
+  //   "다음에 쳐야 할 글자"를 계산한다. (오타를 낸 뒤에는 typed.length가 실제 위치보다 앞서가서
+  //   엉뚱한 글자를 미리 가이드해주는 오류가 있었음) ★
+  let matchedLen=0;
+  while(matchedLen<typed.length && matchedLen<word.length && typed[matchedLen]===word[matchedLen]) matchedLen++;
+  const next=word[matchedLen];
   if(next){if(next===' ')activateFinger('thumb');else if(isEn)highlightKey(next);else highlightKey(getFirstJamo(next));}
   else{clearFingers();document.querySelectorAll('.key.active-key').forEach(k=>k.classList.remove('active-key'));}
 
