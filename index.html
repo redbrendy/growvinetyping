@@ -1353,7 +1353,14 @@ function onWordSetClick(idx){
   if(!currentStudent){ showStudentPicker(); return; }
   beginStageFlow(idx);
 }
-function showStudentPicker(){ showPage('studentPickPage'); renderStudentPickGrid(); }
+function showStudentPicker(){
+  showPage('studentPickPage');
+  renderStudentPickGrid();
+  // ★ 다른 기기에서 추가한 학생도 바로 보이도록 매번 클라우드에서 최신 명단을 다시 불러온다 ★
+  loadStudentsFromCloud().then(()=>{
+    if(document.getElementById('studentPickPage').classList.contains('active')) renderStudentPickGrid();
+  });
+}
 function renderStudentPickGrid(){
   const grid=document.getElementById('studentPickGrid');grid.innerHTML='';
   if(!students.length){grid.innerHTML='<p style="color:var(--muted);font-size:.95rem;grid-column:1/-1;font-weight:700;">등록된 학생이 없어요 🐾<br>관리자 메뉴 &gt; 학생 관리에서 추가해 주세요!</p>';return;}
