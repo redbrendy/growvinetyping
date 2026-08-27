@@ -751,6 +751,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       <button class="btn btn-primary" onclick="addWordSet()">＋ 세트 추가</button>
     </div>
     <div class="card-title">📋 저장된 세트 <span style="font-size:.78rem;color:var(--muted);font-weight:600;">(클릭 시 수정)</span></div>
+    <button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;margin-bottom:10px;" onclick="refreshWordSetsAdmin()">🔄 새로고침 (다른 기기 변경사항 불러오기)</button>
     <div class="admin-set-list" id="adminSetList"></div>
   </div>
 
@@ -1203,6 +1204,54 @@ async function loadAllProgressFromCloud(){
   }catch(e){console.error('🔥 리더보드 불러오기 실패:',e);return {};}finally{clearTimeout(timer);}
 }
 
+/* ══════════════════════════════════════
+   ★ 매주 점수 초기화 — 한국시간(KST) 매주 수요일 오후 5시 30분 ★
+   배지/완료 기록은 그대로 두고, 점수(⭐)만 0으로 초기화한다.
+   여러 기기 중 아무 기기나 앱을 열었을 때 딱 한 번만 초기화가 일어나도록
+   "마지막 초기화 시각"을 클라우드에 저장해 두고 비교한다.
+══════════════════════════════════════ */
+function getLastResetBoundary(now){
+  const KST_OFFSET_MS = 9*60*60*1000;
+  const kst = new Date(now.getTime()+KST_OFFSET_MS); // UTC 메서드로 KST 벽시계 시각을 읽기 위한 트릭
+  const day = kst.getUTCDay(); // 0=일 ... 3=수
+  let diff = day-3;
+  if(diff<0) diff+=7;
+  const boundary = new Date(Date.UTC(kst.getUTCFullYear(),kst.getUTCMonth(),kst.getUTCDate(),17,30,0,0));
+  boundary.setUTCDate(boundary.getUTCDate()-diff);
+  if(boundary.getTime()>kst.getTime()) boundary.setUTCDate(boundary.getUTCDate()-7);
+  return boundary.getTime()-KST_OFFSET_MS; // 실제 UTC 타임스탬프(ms)로 환산
+}
+async function checkWeeklyScoreReset(){
+  const boundary=getLastResetBoundary(new Date());
+  let lastReset=Number(localStorage.getItem('typingLastScoreReset')||0);
+  if(firebaseReady){
+    const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+    try{
+      const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{signal:ctrl.signal});
+      if(res.ok){ const cloudVal=await res.json(); if(cloudVal) lastReset=Math.max(lastReset,Number(cloudVal)); }
+    }catch(e){console.error('🔥 점수 초기화 시각 확인 실패:',e);}
+    finally{clearTimeout(timer);}
+  }
+  if(lastReset>=boundary) return; // 이번 주기는 이미 초기화됨
+  await performWeeklyScoreReset(boundary);
+}
+async function performWeeklyScoreReset(boundary){
+  await loadStudentsFromCloud();
+  for(const name of students){
+    await loadProgressFromCloud(name); // 초기화 직전 다른 기기의 최신 기록까지 반영
+    const p=getProgress(name);
+    p.totalScore=0;
+    if(p.mascot) p.mascot.points=0;
+    saveProgress(name,p);
+  }
+  localStorage.setItem('typingLastScoreReset',String(boundary));
+  if(firebaseReady){
+    const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+    fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify(boundary),signal:ctrl.signal})
+      .catch(e=>console.error('🔥 점수 초기화 시각 저장 실패:',e)).finally(()=>clearTimeout(timer));
+  }
+}
+
 // ★ 단계를 개별로 진행해도 점수가 누적되도록, 점수/콤보 반영 로직을 공용 함수로 분리 ★
 function commitSessionScore(p){
   p.totalScore=(p.totalScore||0)+sessionScore;
@@ -1211,8 +1260,10 @@ function commitSessionScore(p){
   p.mascot.points=p.totalScore;
   return p;
 }
-function finishSet(){
+async function finishSet(){
   stopRepeatSpeak();
+  // ★ 버그 수정(다른 기기 동기화): 최종 점수를 더하기 직전에 클라우드 최신값과 병합 ★
+  if(currentStudent){ await loadProgressFromCloud(currentStudent); }
   const p=getProgress(currentStudent);
   commitSessionScore(p);
   p.sets=p.sets||{};
@@ -1542,15 +1593,7 @@ function startSequentialFlow(){
   stageQueueIdx=0;
   startStage(stageQueue[0]);
 }
-function incrementStageCount(stage){
-  if(!currentStudent) return;
-  const p=getProgress(currentStudent);
-  p.sets=p.sets||{};
-  p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0,stageCounts:{}};
-  p.sets[currentSet.name].stageCounts=p.sets[currentSet.name].stageCounts||{};
-  p.sets[currentSet.name].stageCounts[stage]=(p.sets[currentSet.name].stageCounts[stage]||0)+1;
-  saveProgress(currentStudent,p);
-}
+
 function startStage(stage){
   currentStage=stage;
   closeAllWordLists();
@@ -1572,15 +1615,22 @@ function startStage(stage){
   }
 }
 function onStage13Done(){ onStageFinished(); }
-function onStageFinished(){
-  incrementStageCount(currentStage);
+// ★ 버그 수정(다른 기기 동기화): 점수를 저장하기 직전에 클라우드의 "최신" 기록을 다시 받아
+//   병합한 뒤에 이번 단계 점수를 더한다. 예전에는 이 단계를 시작할 때 캐시해둔 값 위에 그냥
+//   더해서 저장했기 때문에, 그 사이 다른 기기에서 올린 점수가 있으면 그걸 오래된 값으로
+//   덮어써서 "동기화가 안 되고 점수가 계산이 안 되는" 것처럼 보였다. ★
+async function onStageFinished(){
+  if(currentStudent){ await loadProgressFromCloud(currentStudent); }
+  const p=getProgress(currentStudent);
+  p.sets=p.sets||{};
+  p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0,stageCounts:{}};
+  p.sets[currentSet.name].stageCounts=p.sets[currentSet.name].stageCounts||{};
+  p.sets[currentSet.name].stageCounts[currentStage]=(p.sets[currentSet.name].stageCounts[currentStage]||0)+1;
+
   if(singleStageMode){
     // ★ 단계를 하나만 진행해도 그 단계에서 딴 점수/콤보/배지를 바로 저장한다 ★
-    const p=getProgress(currentStudent);
     const earnedPts=sessionScore;
     commitSessionScore(p);
-    p.sets=p.sets||{};
-    p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0};
     const newBadges=awardBadges(p);
     saveProgress(currentStudent,p);
     updateStudentBar();
@@ -1590,6 +1640,7 @@ function onStageFinished(){
     setTimeout(()=>showStageMenu(),1100);
     return;
   }
+  saveProgress(currentStudent,p);
   stageQueueIdx++;
   if(stageQueueIdx<stageQueue.length){
     showToast(`✅ ${currentStage}단계 완료! 다음 단계로 이동해요`);
@@ -1920,7 +1971,27 @@ function updateStats(){
 let adminLang='ko';
 function openAdmin(){document.getElementById('adminPwInput').value='';document.getElementById('adminPwError').textContent='';document.getElementById('adminModal').classList.add('show');setTimeout(()=>document.getElementById('adminPwInput').focus(),100);}
 document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
-function checkAdminPw(){if(document.getElementById('adminPwInput').value===ADMIN_PW){document.getElementById('adminModal').classList.remove('show');showPage('adminPage');renderAdminList();resetNewWordGrids();renderAdminStudentList();renderAdminRecords();}else{document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';}}
+// ★ 버그 수정(다른 기기 동기화): 관리자 화면에 들어갈 때마다 클라우드의 최신 단어 세트/학생
+//   목록을 먼저 받아와 병합한다. 예전에는 앱을 처음 열었을 때 캐시해둔(오래됐을 수 있는) 목록을
+//   그대로 보여주고 편집했기 때문에, 다른 기기에서 방금 추가한 단어가 안 보이는 채로 저장을
+//   누르면 그 사이 다른 기기의 변경사항이 함께 덮어써지는 문제가 있었다. ★
+async function checkAdminPw(){
+  if(document.getElementById('adminPwInput').value!==ADMIN_PW){
+    document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';
+    return;
+  }
+  document.getElementById('adminModal').classList.remove('show');
+  showPage('adminPage');
+  showToast('☁️ 최신 자료를 불러오는 중...');
+  await Promise.all([loadWordSetsFromCloud(), loadStudentsFromCloud()]);
+  renderAdminList();resetNewWordGrids();renderAdminStudentList();renderAdminRecords();
+}
+async function refreshWordSetsAdmin(){
+  showToast('☁️ 최신 단어 세트를 불러오는 중...');
+  await loadWordSetsFromCloud();
+  renderAdminList();
+  showToast('✅ 최신 상태로 갱신했어요!');
+}
 async function renderAdminRecords(){
   const box=document.getElementById('adminRecordsList');
   if(!box) return;
@@ -2157,6 +2228,10 @@ function init(){
       if(document.getElementById('homePage').classList.contains('active')) updateStudentBar();
     });
   }
+  // ★ 매주 수요일 17:30(KST) 점수 초기화 여부 확인 (기한이 지났으면 자동 초기화) ★
+  checkWeeklyScoreReset().then(()=>{
+    if(currentStudent && document.getElementById('homePage').classList.contains('active')) updateStudentBar();
+  });
 }
 init();
 </script>
