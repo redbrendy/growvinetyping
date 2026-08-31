@@ -1242,6 +1242,25 @@ async function loadAllProgressFromCloud(){
     return data||{};
   }catch(e){console.error('🔥 리더보드 불러오기 실패:',e);return {};}finally{clearTimeout(timer);}
 }
+/* ★★★ 순위가 안 보이던 원인 버그 수정 ★★★
+   저장할 때는 주소에 studentKey()로 인코딩해서 보내지만(예: %EC%A0%84%...),
+   Firebase가 주소를 자동으로 디코딩하기 때문에 서버에 실제로 만들어지는 키는
+   한글 원본("전소은")이다. 그런데 순위/기록 화면은 전체 데이터를 한 번에 받아온 뒤
+   인코딩된 키로 찾으려 해서 한글 이름은 항상 못 찾았고, 결국 클라우드 기록을 무시하고
+   그 태블릿의 로컬 기록만 보여줬다(=기기별로 따로 노는 것처럼 보임).
+   그래서 이름 → 데이터를 찾을 때 가능한 키 형태를 모두 시도한다. */
+function pickCloudProgress(cloud,name){
+  if(!cloud) return null;
+  const candidates=[name, studentKey(name), encodeURIComponent(name)];
+  for(const k of candidates){ if(k && cloud[k]) return cloud[k]; }
+  // 혹시 예전 방식으로 저장돼 인코딩된 키가 남아 있다면 디코딩해서 대조한다
+  for(const k of Object.keys(cloud)){
+    let dec=k;
+    try{ dec=decodeURIComponent(k); }catch(e){}
+    if(dec===name) return cloud[k];
+  }
+  return null;
+}
 
 /* ══════════════════════════════════════
    ★ 매주 점수 초기화 — 한국시간(KST) 매주 수요일 오후 5시 30분 ★
@@ -1426,8 +1445,7 @@ async function openLeaderboard(){
   list.innerHTML='<p style="color:var(--muted);font-weight:700;">불러오는 중...</p>';
   const cloud=await loadAllProgressFromCloud();
   const rows=students.map(name=>{
-    const key=studentKey(name);
-    const cloudData=cloud[key]||null;
+    const cloudData=pickCloudProgress(cloud,name);
     const localData=progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||null;
     // ★ 버그 수정: 방금 이 기기에서 딴 점수가 클라우드에 반영되기 전(전송 중)에 순위를 열면
     //   아직 예전 점수인 클라우드 값으로 덮어써져서 "점수가 안 바뀐 것처럼" 보이는 문제가 있었다.
@@ -2099,7 +2117,7 @@ async function renderAdminRecords(){
   box.innerHTML='';
   students.forEach(name=>{
     const key=studentKey(name);
-    const p=cloud[key]||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
+    const p=pickCloudProgress(cloud,name)||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
     const lvl=Math.floor((p.totalScore||0)/100)+1;
     const setRows=Object.keys(p.sets||{}).map(sn=>{
       const s=p.sets[sn]||{};
