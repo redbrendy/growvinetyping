@@ -374,7 +374,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 
 <!-- ══ 홈 ══ -->
 <!-- ★ 버전 표시 — 태블릿이 최신 버전인지 한눈에 확인용 ★ -->
-<div id="versionBadge" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;pointer-events:none;">v2.0</div>
+<div id="versionBadge" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;pointer-events:none;">v2.1</div>
 
 <div id="homePage" class="page active">
   <div class="card">
@@ -1248,11 +1248,23 @@ async function loadProgressFromCloud(name){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(data){
-      const merged=mergeProgress(progressCache[name],data);
+      // ★★★ 버그 수정 ★★★
+      // 예전에는 progressCache(메모리)만 보고 병합했다. 그런데 페이지를 새로 열면 캐시가
+      // 비어 있어서, 이 기기에 저장돼 있던 기록(localStorage)이 통째로 무시되고 서버 값으로
+      // 덮어써졌다. 그 결과 화면에는 기기의 옛 점수가, 서버에는 낮은 점수가 남아
+      // "저장이 안 되는" 것처럼 보였다. 이제 localStorage까지 함께 병합한다.
+      const localSaved=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null');
+      const localData=mergeProgress(progressCache[name], localSaved);
+      const merged=mergeProgress(localData,data);
       progressCache[name]=merged;
       localStorage.setItem('typingProgress_'+name,JSON.stringify(merged));
       // 병합 결과가 클라우드보다 더 온전하면(로컬이 더 최신이면) 클라우드도 갱신
       if(JSON.stringify(merged)!==JSON.stringify(data)) saveProgress(name,merged);
+    }else{
+      // 서버에 기록이 없으면, 이 기기에 남아 있는 기록을 서버로 올려준다
+      const localSaved=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null');
+      const localData=mergeProgress(progressCache[name], localSaved);
+      if(localData) saveProgress(name,localData);
     }
   }catch(e){console.error('🔥 진행상황 불러오기 실패:',e);}finally{clearTimeout(timer);}
 }
@@ -2299,7 +2311,39 @@ function updateWordField(si,wi,f,v){wordSets[si].words[wi][f]=v;}
 function deleteWord(si,wi){if(wordSets[si].words.length<=1){alert('최소 1개 이상!');return;}wordSets[si].words.splice(wi,1);renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${si}`);const a=document.getElementById(`editArrow${si}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);}
 function addWord(si){const isEn=wordSets[si].lang==='en';wordSets[si].words.push(isEn?{text:'',meaning:''}:{text:''});renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${si}`);const a=document.getElementById(`editArrow${si}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}const l=document.getElementById(`wordList${si}`);if(l){const ins=l.querySelectorAll('input');if(ins.length)ins[ins.length-(isEn?2:1)].focus();}},10);}
 function saveSet(i){wordSets[i].words=wordSets[i].words.filter(w=>w.text.trim());if(!wordSets[i].words.length){alert('단어 최소 1개!');return;}if(!wordSets[i].name.trim()){alert('세트 이름 입력!');return;}saveWordSets();renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${i}`);const a=document.getElementById(`editArrow${i}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);showToast('💾 저장되었어요!');}
-function deleteSet(i){if(!confirm(`"${wordSets[i].name}" 삭제할까요?`))return;wordSets.splice(i,1);saveWordSets();renderAdminList();}
+/* ★★★ 버그 수정: 삭제한 단어 세트가 되살아나는 문제 ★★★
+   단어 세트 병합은 "합집합" 방식이라, 어떤 기기가 예전 목록(삭제 전)을 갖고 있으면
+   그 기기가 앱을 여는 순간 삭제한 세트를 다시 서버로 올려버렸다.
+   그래서 "삭제한 세트 이름 목록"을 서버에 따로 남겨두고, 병합할 때 이 목록에 있는 이름은
+   항상 제외한다. */
+let deletedSetNames=JSON.parse(localStorage.getItem('typingDeletedSets')||'[]');
+function saveDeletedSetNames(){
+  localStorage.setItem('typingDeletedSets',JSON.stringify(deletedSetNames));
+  if(!firebaseReady) return;
+  fetch(`${FIREBASE_DB_URL}/typingApp/deletedSets.json`,{method:'PUT',body:JSON.stringify(deletedSetNames)})
+    .catch(e=>console.error('🔥 삭제 목록 저장 실패:',e));
+}
+async function loadDeletedSetNames(){
+  if(!firebaseReady) return;
+  try{
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/deletedSets.json`);
+    if(!res.ok) return;
+    const data=await res.json();
+    if(Array.isArray(data)){
+      deletedSetNames=Array.from(new Set([...deletedSetNames,...data]));
+      localStorage.setItem('typingDeletedSets',JSON.stringify(deletedSetNames));
+    }
+  }catch(e){console.error('🔥 삭제 목록 불러오기 실패:',e);}
+}
+function deleteSet(i){
+  if(!confirm(`"${wordSets[i].name}" 삭제할까요?`))return;
+  const nm=wordSets[i].name;
+  if(!deletedSetNames.includes(nm)) deletedSetNames.push(nm);
+  saveDeletedSetNames();
+  wordSets.splice(i,1);
+  saveWordSets();
+  renderAdminList();
+}
 function moveSet(i,dir){
   const j=i+dir;
   if(j<0||j>=wordSets.length)return;
@@ -2308,6 +2352,11 @@ function moveSet(i,dir){
   renderAdminList();
 }
 function saveWordSets(){
+  // ★ 같은 이름으로 세트를 다시 만들면 삭제 목록에서 빼준다(다시 살릴 수 있게) ★
+  const present=new Set(wordSets.map(s=>s&&s.name).filter(Boolean));
+  const before=deletedSetNames.length;
+  deletedSetNames=deletedSetNames.filter(n=>!present.has(n));
+  if(deletedSetNames.length!==before) saveDeletedSetNames();
   localStorage.setItem('typingSets',JSON.stringify(wordSets)); // 오프라인/실패 대비 임시 저장
   if(!firebaseReady) return;
   const ctrl = new AbortController();
@@ -2340,6 +2389,8 @@ function mergeWordSets(localList, cloudList){
       byName.set(s.name, s);
     }
   });
+  // ★ 삭제된 세트는 어느 기기에 남아 있든 되살리지 않는다 ★
+  (deletedSetNames||[]).forEach(n=>byName.delete(n));
   // 순서는 로컬 순서를 우선하고, 로컬에 없는(클라우드에만 있는) 세트는 뒤에 붙인다
   const order=[];
   (localList||[]).forEach(s=>{ if(s&&s.name&&byName.has(s.name)&&!order.includes(s.name)) order.push(s.name); });
@@ -2348,6 +2399,7 @@ function mergeWordSets(localList, cloudList){
 }
 async function loadWordSetsFromCloud(){
   if(!firebaseReady) return;
+  await loadDeletedSetNames(); // ★ 삭제 목록을 먼저 받아와야 삭제된 세트가 안 살아난다 ★
   const ctrl = new AbortController();
   const timer = setTimeout(()=>ctrl.abort(), 8000);
   try{
