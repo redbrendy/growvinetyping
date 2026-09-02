@@ -374,7 +374,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 
 <!-- ══ 홈 ══ -->
 <!-- ★ 버전 표시 — 태블릿이 최신 버전인지 한눈에 확인용 ★ -->
-<div id="versionBadge" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;pointer-events:none;">v2.1</div>
+<div id="versionBadge" onclick="checkForUpdate(false)" title="눌러서 업데이트 확인" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;">v2.2</div>
 
 <div id="homePage" class="page active">
   <div class="card">
@@ -1188,6 +1188,12 @@ function getProgress(name){
   return progressCache[name];
 }
 function saveProgress(name,p){
+  // ★★★ 버그 수정: 기준점(scoreEpoch)이 0인 옛 데이터가 초기화를 되돌리는 문제 ★★★
+  // 병합 규칙은 "기준점이 같으면 큰 값 우선"인데, 옛 버전이 저장한 기록은 기준점이 전부 0이라
+  // 초기화된 0점과 옛 360점이 동점 취급되어 360점이 이겨버렸다. 그래서 기기를 열 때마다
+  // 옛 점수가 되살아나 서로 덮어쓰는 상태가 됐다.
+  // 이제 저장할 때 기준점이 비어 있으면 "이번 주기"의 기준점을 반드시 찍어준다.
+  if(!p.scoreEpoch) p.scoreEpoch=getLastResetBoundary(new Date());
   progressCache[name]=p;
   localStorage.setItem('typingProgress_'+name,JSON.stringify(p));
   if(!firebaseReady) return;
@@ -2431,6 +2437,37 @@ function ensureDefaultSets(){
   }
 }
 
+/* ★★★ 자동 업데이트 ★★★
+   탭을 계속 켜둔 기기에서 옛 코드가 남아 도는 문제를 막는다.
+   서버의 파일을 주기적으로 확인해서(캐시를 우회한 요청) 버전이 달라지면
+   저장이 꼬이기 전에 자동으로 새로고침한다. */
+const APP_VERSION='v2.2';
+let updateChecking=false;
+async function checkForUpdate(auto){
+  if(updateChecking) return;
+  updateChecking=true;
+  try{
+    // 캐시를 우회하려고 매번 다른 주소로 요청한다
+    const res=await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'});
+    if(!res.ok) return;
+    const text=await res.text();
+    const m=text.match(/id="versionBadge"[^>]*>([^<]+)</);
+    const serverVer=m&&m[1]?m[1].trim():null;
+    if(serverVer && serverVer!==APP_VERSION){
+      if(auto){
+        // 연습 도중에 갑자기 새로고침되면 점수를 잃을 수 있으니, 홈 화면일 때만 자동 적용
+        const onHome=document.getElementById('homePage')?.classList.contains('active')
+                  || document.getElementById('studentPickPage')?.classList.contains('active');
+        if(!onHome) return;
+      }
+      showToast(`🔄 새 버전(${serverVer})이 있어요. 잠시 후 새로고침합니다...`);
+      setTimeout(()=>location.reload(true),1500);
+    }else if(!auto){
+      showToast(`✅ 최신 버전이에요 (${APP_VERSION})`);
+    }
+  }catch(e){console.error('업데이트 확인 실패:',e);}
+  finally{updateChecking=false;}
+}
 function init(){
   // ★ 클라우드 응답을 기다리지 않고 로컬(캐시/기본값)로 즉시 첫 화면을 그려서
   //   "홈을 눌러야만 목록이 보이는" 지연 현상을 없앤다.
@@ -2457,6 +2494,11 @@ function init(){
   checkWeeklyScoreReset().then(()=>{
     if(currentStudent && document.getElementById('homePage').classList.contains('active')) updateStudentBar();
   });
+
+  // ★ 자동 업데이트: 10분마다, 그리고 태블릿을 다시 켜거나 화면으로 돌아올 때마다 확인 ★
+  setInterval(()=>checkForUpdate(true), 10*60*1000);
+  window.addEventListener('focus',()=>checkForUpdate(true));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkForUpdate(true); });
 }
 init();
 </script>
