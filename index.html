@@ -1321,6 +1321,12 @@ function getLastResetBoundary(now){
   if(boundary.getTime()>kst.getTime()) boundary.setUTCDate(boundary.getUTCDate()-7);
   return boundary.getTime()-KST_OFFSET_MS; // 실제 UTC 타임스탬프(ms)로 환산
 }
+function parseResetMarker(v){
+  if(v==null) return 0;
+  if(typeof v==='object') return Number(v.boundary)||0; // claimWeeklyReset이 남긴 {boundary,token} 형태
+  return Number(v)||0; // 예전부터 쓰던 단순 숫자 형태(하위 호환)
+}
+function randomClaimToken(){ return Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); }
 async function checkWeeklyScoreReset(){
   const boundary=getLastResetBoundary(new Date());
   let lastReset=Number(localStorage.getItem('typingLastScoreReset')||0);
@@ -1328,7 +1334,7 @@ async function checkWeeklyScoreReset(){
     const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
     try{
       const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{signal:ctrl.signal});
-      if(res.ok){ const cloudVal=await res.json(); if(cloudVal) lastReset=Math.max(lastReset,Number(cloudVal)); }
+      if(res.ok){ const cloudVal=await res.json(); const n=parseResetMarker(cloudVal); if(n) lastReset=Math.max(lastReset,n); }
     }catch(e){console.error('🔥 점수 초기화 시각 확인 실패:',e);}
     finally{clearTimeout(timer);}
   }
@@ -1343,15 +1349,52 @@ async function checkWeeklyScoreReset(){
     return;
   }
   if(lastReset>=boundary) return; // 이번 주기는 이미 초기화됨
+  // ★★★★★ 심각한 버그 수정 (장소은 학생 사례) ★★★★★
+  // 예전에는 "초기화 완료" 표시를 전체 학생을 다 돌고 난 "맨 마지막"에 서버로 저장했다.
+  // 학교 와이파이 문제로 그 마지막 저장 한 번만 실패해도 서버에는 "아직 초기화 안 됨"이
+  // 그대로 남아서, 그 뒤로 아무 기기나(며칠 뒤라도!) 앱을 열 때마다 "초기화 안 됐네?" 하고
+  // 다시 초기화를 실행해버렸다. 그 사이(예: 목요일에) 학생이 새로 딴 점수까지 통째로
+  // 0으로 밀려나가는 사고가 이렇게 발생했다.
+  // 그래서 이제 "내가 이번 초기화를 맡는다"는 표시부터 먼저 남기고, 그 표시가 정말
+  // 내 것으로 확정됐는지 다시 읽어서 확인한 뒤에만 실제로 점수를 0으로 만든다.
+  // 거의 동시에 다른 기기도 시도했다면 마지막에 쓴 한 기기만 진행하고 나머지는 조용히
+  // 물러난다 — 여러 기기가 동시에 전체 학생 점수를 중복 초기화하는 사고도 함께 막는다.
+  const claimed=await claimWeeklyReset(boundary);
+  if(!claimed) return; // 표시 저장이 실패했거나 다른 기기가 먼저 가져갔다면 아무 것도 건드리지 않는다
   await performWeeklyScoreReset(boundary);
+}
+async function claimWeeklyReset(boundary){
+  if(!firebaseReady) return false;
+  const myToken=randomClaimToken();
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+  try{
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify({boundary,token:myToken}),signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+  }catch(e){ console.error('🔥 초기화 담당 표시 저장 실패:',e); return false; }
+  finally{ clearTimeout(timer); }
+  // 거의 동시에 다른 기기가 썼을 수 있으니 잠깐 기다렸다가 다시 읽어서
+  // 최종적으로 남은 값이 정말 내 토큰인지 확인한다(Firebase는 나중에 쓴 값이 이긴다).
+  await new Promise(r=>setTimeout(r,300));
+  const ctrl2=new AbortController();const timer2=setTimeout(()=>ctrl2.abort(),8000);
+  try{
+    const res2=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{signal:ctrl2.signal});
+    if(!res2.ok) return false;
+    const v=await res2.json();
+    const ok=!!(v && typeof v==='object' && v.token===myToken && Number(v.boundary)>=boundary);
+    if(ok) localStorage.setItem('typingLastScoreReset',String(boundary));
+    return ok;
+  }catch(e){ return false; }
+  finally{ clearTimeout(timer2); }
 }
 async function recordResetBoundary(boundary){
   localStorage.setItem('typingLastScoreReset',String(boundary));
-  if(!firebaseReady) return;
+  if(!firebaseReady) return false;
   const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
   try{
-    await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify(boundary),signal:ctrl.signal});
-  }catch(e){console.error('🔥 점수 초기화 시각 저장 실패:',e);}
+    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify(boundary),signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return true;
+  }catch(e){console.error('🔥 점수 초기화 시각 저장 실패:',e); return false;}
   finally{clearTimeout(timer);}
 }
 async function performWeeklyScoreReset(boundary){
@@ -2194,8 +2237,20 @@ async function manualSetScore(name,key){
   if(!Number.isFinite(val)||val<0||!Number.isFinite(lifeVal)||lifeVal<0){
     alert('0 이상의 숫자를 입력해 주세요!');return;
   }
+  // ★ 버그 예방: input 박스 값은 "관리자 패널을 열었던 그 순간" 값이라, 패널을 오래
+  //   켜둔 사이 학생이 실제로 더 쌓은 점수를 모른 채 그대로 덮어써버릴 수 있었다.
+  //   저장 직전에 서버 최신 값을 다시 받아와 입력값과 다르면 한 번 더 확인시킨다. ★
   await loadProgressFromCloud(name);
   const p=getProgress(name);
+  const liveWeekly=p.totalScore||0, liveLifetime=(p.lifetimeScore!=null?p.lifetimeScore:liveWeekly);
+  if(val!==liveWeekly||lifeVal!==liveLifetime){
+    const proceed=confirm(
+      `⚠️ 지금 서버에 저장된 최신 점수는\n이번 주 ${liveWeekly}점 · 누적 ${liveLifetime}점입니다.\n\n`+
+      `입력하신 값(이번 주 ${val}점 · 누적 ${lifeVal}점)으로 덮어쓸까요?\n`+
+      `(패널을 열어둔 사이 그동안 쌓인 점수가 있었다면 이 값으로 사라집니다)`
+    );
+    if(!proceed){ renderAdminRecords(); return; }
+  }
   p.totalScore=val;
   p.lifetimeScore=lifeVal;
   p.scoreEpoch=Date.now(); // ★ 수동 수정이 다른 기기의 예전 값에 덮어써지지 않도록 최신 기준점 부여 ★
