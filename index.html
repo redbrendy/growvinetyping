@@ -297,6 +297,10 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 .mascot-pick-item.sel{border-color:var(--pk);background:#FFF0F5;box-shadow:0 0 0 3px rgba(255,143,171,.2);}
 .mascot-pick-item .mp-name{font-size:.68rem;font-weight:800;color:var(--muted);margin-top:2px;}
 
+/* ── 동기화 상태 표시 ── */
+#syncBadge{position:fixed;right:6px;bottom:30px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;display:none;}
+#syncBadge.warn{background:#E85D5D;display:block;}
+
 @media(max-width:600px){
   .key{min-width:28px;height:30px;font-size:.68rem;}.key.space-key{min-width:105px;}
   .popup-box{padding:26px 16px;}.prompt-word{font-size:2.1rem;}
@@ -374,7 +378,8 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 
 <!-- ══ 홈 ══ -->
 <!-- ★ 버전 표시 — 태블릿이 최신 버전인지 한눈에 확인용 ★ -->
-<div id="versionBadge" onclick="checkForUpdate(false)" title="눌러서 업데이트 확인" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;">v2.2</div>
+<div id="versionBadge" onclick="checkForUpdate(false)" title="눌러서 업데이트 확인" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;">v3.1</div>
+<div id="syncBadge" onclick="flushPendingEvents(true)" title="눌러서 다시 저장 시도"></div>
 
 <div id="homePage" class="page active">
   <div class="card">
@@ -784,7 +789,10 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
       <button class="btn btn-primary" onclick="addWordSet()">＋ 세트 추가</button>
     </div>
     <div class="card-title">📋 저장된 세트 <span style="font-size:.78rem;color:var(--muted);font-weight:600;">(클릭 시 수정)</span></div>
-    <button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;margin-bottom:10px;" onclick="refreshWordSetsAdmin()">🔄 새로고침 (다른 기기 변경사항 불러오기)</button>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="refreshWordSetsAdmin()">🔄 새로고침 (다른 기기 변경사항 불러오기)</button>
+      <button class="btn btn-sm" style="background:var(--yw2);color:#8B6914;" onclick="forceRestoreLocalSets()" title="이 기기에만 남아 있는 세트를 서버로 올립니다">📤 이 기기 세트 서버로 복구</button>
+    </div>
     <div class="admin-set-list" id="adminSetList"></div>
   </div>
 
@@ -854,7 +862,6 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
     <div id="adminPwError" style="color:#EF4444;font-size:.88rem;margin-top:7px;font-weight:700;"></div>
   </div>
 </div>
-
 <script>
 /* ── 파티클 ── */
 (function(){
@@ -965,45 +972,374 @@ document.getElementById('submitInput')?.addEventListener('focus', ()=>setTimeout
    데이터 & 상태
 ══════════════════════════════════════ */
 const ADMIN_PW='1234';
-/* ══════════════════════════════════════
-   🔥 Firebase Realtime Database — REST API 직접 호출 방식
-   ★ 일부 학교/공용 와이파이는 Firebase SDK가 쓰는 WebSocket을 막아서
-     저장이 계속 실패하는 경우가 있었다. 순수 HTTPS(fetch)만 쓰는
-     REST API 방식으로 바꿔서 이 문제를 피한다.
-══════════════════════════════════════ */
-const FIREBASE_DB_URL = "https://growvine-typing-3861c-default-rtdb.firebaseio.com";
-const firebaseReady = true;
 
-let wordSets=JSON.parse(localStorage.getItem('typingSets')||'[]');
+let wordSets=lsGet('typingSets',[])||[];
 let currentSet=null, practiceQueue=[], currentIdx=0;
 let correctCount=0, wrongTotalCount=0, isRetry=false;
 let isComposing=false, popupStep=0, popupEnterCount=0;
 let repeatTimer=null;
 
-/* ══════════════════════════════════════
-   🙋 학생 명단 — wordSets와 동일한 REST 저장 패턴
-══════════════════════════════════════ */
-let students=JSON.parse(localStorage.getItem('typingStudents')||'[]');
-let currentStudent=localStorage.getItem('typingStudent')||null;
+/* ══════════════════════════════════════════════════════════════════
+   🔥🔥🔥 v3.0 — 점수 동기화 방식 전면 교체 🔥🔥🔥
 
-function saveStudents(){
-  localStorage.setItem('typingStudents',JSON.stringify(students));
-  if(!firebaseReady) return;
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  fetch(`${FIREBASE_DB_URL}/typingApp/students.json`,{method:'PUT',body:JSON.stringify(students),signal:ctrl.signal})
-    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);})
-    .catch(e=>console.error('🔥 학생 저장 실패:',e))
-    .finally(()=>clearTimeout(timer));
-}
-async function loadStudentsFromCloud(){
-  if(!firebaseReady) return;
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
+   [예전 방식의 치명적 문제]
+   기기마다 "그 기기가 아는 전체 점수 덩어리"를 통째로 서버에 덮어썼다(PUT).
+   그래서 A 태블릿이 522점을 올려둬도, 잠깐 인터넷이 끊겼거나 화면을 오래
+   켜둬서 옛 정보를 들고 있던 B 태블릿이 저장하는 순간 서버 값이 132점으로
+   통째로 되돌아갔다. 같은 시각에 기기마다 점수가 다르게 보이던 진짜 원인.
+
+   [새 방식]
+   점수를 "덩어리"로 저장하지 않고, 단계를 끝낼 때마다 그 한 판의 기록만
+   따로따로 서버에 쌓는다(각각 다른 주소에 저장 → 서로 절대 덮어쓸 수 없음).
+   화면에 보이는 점수는 쌓인 기록을 모두 더해서 계산한다.
+   → 어느 기기에서 계산하든 결과가 항상 똑같다.
+   → 인터넷이 잠깐 끊겨도 그 기록만 늦게 올라갈 뿐, 다른 점수를 지우지 않는다.
+   → 주간 초기화도 "수요일 이후 기록만 더하기"로 자동 계산되므로,
+     예전처럼 초기화가 되살아나거나 남의 점수를 밀어버리는 사고가 없다.
+══════════════════════════════════════════════════════════════════ */
+const FIREBASE_DB_URL = "https://growvine-typing-3861c-default-rtdb.firebaseio.com";
+const firebaseReady = true;
+
+let lastCloudOk = true;
+
+async function fbGet(path){
+  if(!firebaseReady) return {ok:false,data:null};
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),9000);
   try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/students.json`,{signal:ctrl.signal});
+    const res=await fetch(`${FIREBASE_DB_URL}${path}`,{signal:ctrl.signal,cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    if(Array.isArray(data)&&data.length){students=data;localStorage.setItem('typingStudents',JSON.stringify(students));}
-  }catch(e){console.error('🔥 학생 불러오기 실패:',e);}finally{clearTimeout(timer);}
+    lastCloudOk=true;
+    return {ok:true,data};
+  }catch(e){
+    console.error('🔥 불러오기 실패',path,e);
+    lastCloudOk=false;
+    return {ok:false,data:null};
+  }finally{ clearTimeout(timer); }
+}
+async function fbPut(path, body, opts){
+  if(!firebaseReady) return false;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),9000);
+  try{
+    const fetchOpts={method:'PUT',body:JSON.stringify(body),signal:ctrl.signal};
+    if(opts&&opts.keepalive) fetchOpts.keepalive=true; // 탭이 닫히는 중에도 요청이 최대한 끝까지 전송되게 함
+    const res=await fetch(`${FIREBASE_DB_URL}${path}`,fetchOpts);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    lastCloudOk=true;
+    return true;
+  }catch(e){
+    console.error('🔥 저장 실패',path,e);
+    lastCloudOk=false;
+    return false;
+  }finally{ clearTimeout(timer); }
+}
+
+function studentKey(name){ return encodeURIComponent(name).replace(/[.#$\[\]\/]/g,'_'); }
+
+/* ── 로컬 보관(오프라인 대비) ── */
+function lsGet(k,def){ try{ const v=JSON.parse(localStorage.getItem(k)); return (v==null?def:v); }catch(e){ return def; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+function localEvents(name){ return lsGet('typingEv_'+name,{})||{}; }
+function saveLocalEvents(name,ev){ lsSet('typingEv_'+name,ev); }
+function localBase(name){ return lsGet('typingBase_'+name,null); }
+function saveLocalBase(name,b){ lsSet('typingBase_'+name,b); }
+function localPrefs(name){ return lsGet('typingPrefs_'+name,null); }
+function saveLocalPrefs(name,p){ lsSet('typingPrefs_'+name,p); }
+
+/* ── 아직 서버에 못 올린 기록 대기열 ── */
+function pendingList(){ return lsGet('typingPending',[])||[]; }
+function savePending(list){ lsSet('typingPending',list); }
+function queuePending(name,id){
+  const list=pendingList();
+  if(!list.some(x=>x.name===name&&x.id===id)) list.push({name,id});
+  savePending(list);
+  updateSyncBadge();
+}
+function updateSyncBadge(){
+  const el=document.getElementById('syncBadge');
+  if(!el) return;
+  const n=pendingList().length;
+  if(n>0){ el.textContent=`⚠️ 저장 대기 ${n}건 — 눌러서 다시 시도`; el.classList.add('warn'); }
+  else{ el.classList.remove('warn'); el.style.display='none'; }
+}
+async function flushPendingEvents(manual,keepalive){
+  const list=pendingList();
+  if(!list.length){ if(manual) showToast('✅ 모두 저장되어 있어요!'); return; }
+  const rest=[];
+  for(const item of list){
+    const ev=(localEvents(item.name)||{})[item.id];
+    if(!ev){ continue; }
+    const ok=await fbPut(`/typingApp/events/${studentKey(item.name)}/${item.id}.json`, ev, {keepalive});
+    if(!ok) rest.push(item);
+  }
+  savePending(rest);
+  updateSyncBadge();
+  if(manual) showToast(rest.length?`⚠️ 아직 ${rest.length}건이 남았어요 (인터넷 확인)`:'✅ 밀린 점수를 모두 저장했어요!');
+  if(!rest.length && currentStudent){ await refreshProgress(currentStudent); updateStudentBar(); }
+}
+window.addEventListener('online',()=>flushPendingEvents(false));
+/* ★ 추가: 탭이 백그라운드로 가거나 닫히는 순간에도 마지막으로 한 번 더 저장을 시도한다.
+   (예전에는 기기가 이 상태로 계속 방치되면 밀린 점수가 영영 서버에 못 올라갈 수 있었다) ★ */
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) flushPendingEvents(false,true); });
+window.addEventListener('pagehide',()=>{ flushPendingEvents(false,true); });
+
+/* ── 한 판의 기록을 서버에 쌓기(절대 덮어쓰지 않는 저장) ── */
+function newEventId(){ return Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
+async function pushEvent(name, ev){
+  const id=ev.id||newEventId();
+  delete ev.id;
+  // 1) 먼저 이 기기에 기록해서, 인터넷이 끊겨도 점수가 바로 반영되게 한다
+  const evs=localEvents(name); evs[id]=ev; saveLocalEvents(name,evs);
+  // 2) 서버에 올린다(각 기록마다 주소가 달라서 다른 기기 점수를 건드릴 수 없다)
+  const ok=await fbPut(`/typingApp/events/${studentKey(name)}/${id}.json`, ev);
+  if(!ok) queuePending(name,id); else updateSyncBadge();
+  return ok;
+}
+
+/* ══════════════════════════════════════
+   ★ 주간 초기화 기준 — 한국시간 매주 수요일 오후 5시 30분 ★
+   이제 아무것도 저장하지 않는다. "이 시각 이후의 기록만 더한다"로 계산만 한다.
+══════════════════════════════════════ */
+function getLastResetBoundary(now){
+  const KST_OFFSET_MS = 9*60*60*1000;
+  const kst = new Date(now.getTime()+KST_OFFSET_MS);
+  const day = kst.getUTCDay(); // 0=일 ... 3=수
+  let diff = day-3;
+  if(diff<0) diff+=7;
+  const boundary = new Date(Date.UTC(kst.getUTCFullYear(),kst.getUTCMonth(),kst.getUTCDate(),17,30,0,0));
+  boundary.setUTCDate(boundary.getUTCDate()-diff);
+  if(boundary.getTime()>kst.getTime()) boundary.setUTCDate(boundary.getUTCDate()-7);
+  return boundary.getTime()-KST_OFFSET_MS;
+}
+
+/* ══════════════════════════════════════
+   점수 계산 — 서버에 쌓인 기록을 모두 더한다
+══════════════════════════════════════ */
+const BADGES=[
+  {id:'first_set',name:'첫 세트 완료',emoji:'🏅'},
+  {id:'combo10',name:'콤보 10 달성',emoji:'🔥'},
+  {id:'all4stage',name:'전체 4단계 클리어',emoji:'🌟'},
+  {id:'score500',name:'점수 500점 달성',emoji:'💎'},
+  {id:'sets5',name:'세트 5회 완료',emoji:'🏆'}
+];
+
+function emptyProgress(){
+  return {totalScore:0,lifetimeScore:0,maxCombo:0,sets:{},badges:[],completedAll4:false,mascot:null};
+}
+function computeProgress(name, base, events){
+  const boundary=getLastResetBoundary(new Date());
+  const baseTs=Number(base&&base.ts)||0;
+  let lifetime=Number(base&&base.lifetime)||0;
+  let weekly=((Number(base&&base.weeklyEpoch)||0)===boundary)?(Number(base&&base.weekly)||0):0;
+  let maxCombo=Number(base&&base.maxCombo)||0;
+  const counts={}; // setName -> {stage: n}
+  const addCounts=(setsObj)=>{
+    if(!setsObj||typeof setsObj!=='object') return;
+    Object.keys(setsObj).forEach(sn=>{
+      const sc=(setsObj[sn]||{}).stageCounts||{};
+      counts[sn]=counts[sn]||{};
+      [1,2,3,4].forEach(st=>{
+        const v=Number(sc[st])||0;
+        if(v) counts[sn][st]=(counts[sn][st]||0)+v;
+      });
+    });
+  };
+  addCounts(base&&base.sets);
+  Object.keys(events||{}).forEach(id=>{
+    const e=events[id];
+    if(!e||typeof e!=='object') return;
+    const ts=Number(e.ts)||0;
+    if(ts<=baseTs) return;                       // 관리자가 점수를 직접 고친 시점 이전 기록은 무시
+    const pts=Number(e.pts)||0;
+    if(e.lt!==false) lifetime+=pts;              // 누적 점수
+    if(e.wk!==false && ts>=boundary) weekly+=pts; // 이번 주 점수
+    const c=Number(e.combo)||0; if(c>maxCombo) maxCombo=c;
+    if(e.sets) addCounts(e.sets);
+    else if(e.set){
+      const st=Number(e.stage)||1;
+      counts[e.set]=counts[e.set]||{};
+      counts[e.set][st]=(counts[e.set][st]||0)+1;
+    }
+  });
+  const sets={};
+  let completedAll4=false;
+  Object.keys(counts).forEach(sn=>{
+    const sc=counts[sn];
+    const def=wordSets.find(s=>s&&s.name===sn);
+    const stages=def?buildStageQueue(def):Object.keys(sc).map(Number);
+    const times=stages.length?Math.min(...stages.map(st=>sc[st]||0)):0;
+    sets[sn]={stageCounts:sc,timesCompleted:times};
+    if(stages.includes(4)&&stages.every(st=>(sc[st]||0)>0)) completedAll4=true;
+  });
+  const prefs=localPrefs(name)||{};
+  const p={
+    totalScore:Math.max(0,weekly),
+    lifetimeScore:Math.max(0,lifetime),
+    maxCombo, sets, completedAll4,
+    mascot: prefs.mascot||null,
+    badges:[]
+  };
+  p.badges=computeBadges(p);
+  return p;
+}
+function computeBadges(p){
+  const ids=[];
+  if(Object.keys(p.sets||{}).length>=1) ids.push('first_set');
+  if((p.maxCombo||0)>=10) ids.push('combo10');
+  if(p.completedAll4) ids.push('all4stage');
+  if(Math.max(p.totalScore||0,p.lifetimeScore||0)>=500) ids.push('score500');
+  if(Object.values(p.sets||{}).reduce((a,s)=>a+(s.timesCompleted||0),0)>=5) ids.push('sets5');
+  return ids;
+}
+
+let progressCache={};
+function getProgress(name){
+  if(!name) return emptyProgress();
+  if(!progressCache[name]) progressCache[name]=computeProgress(name, localBase(name), localEvents(name));
+  return progressCache[name];
+}
+
+/* ── 예전 버전(v2.x) 점수를 새 방식으로 한 번만 옮기기 ──
+   ★ 중요: 기기(브라우저)에 남아 있는 옛 점수는 쓰지 않고, 서버에 있는 기록만 옮긴다.
+     예전 덮어쓰기 버그 때문에 기기마다 서로 다른(틀린) 점수가 남아 있어서,
+     그걸 살리면 오히려 잘못된 점수가 되살아난다. 서버 기록이 정답 기준. ★ */
+async function ensureLegacyImport(name, events){
+  if(localStorage.getItem('typingLegacyDone_'+name)==='1') return events;
+  const key=studentKey(name);
+  const cloudRes=await fbGet(`/typingApp/progress/${key}.json`);
+  if(!cloudRes.ok) return events;                   // 서버를 못 읽었으면 다음 기회에
+  const legacyCloud=cloudRes.data;
+  if(!legacyCloud){ localStorage.setItem('typingLegacyDone_'+name,'1'); return events; }
+
+  const num=v=>Number(v)||0;
+  const life=num(legacyCloud.lifetimeScore!=null?legacyCloud.lifetimeScore:legacyCloud.totalScore);
+  const boundary=getLastResetBoundary(new Date());
+  const week=(num(legacyCloud.scoreEpoch)===boundary?num(legacyCloud.totalScore):0);
+  const combo=num(legacyCloud.maxCombo);
+  const mergedSets={};
+  [legacyCloud.sets].forEach(src=>{
+    if(!src||typeof src!=='object') return;
+    Object.keys(src).forEach(sn=>{
+      const sc=(src[sn]||{}).stageCounts||{};
+      mergedSets[sn]=mergedSets[sn]||{stageCounts:{}};
+      [1,2,3,4].forEach(st=>{
+        const v=Number(sc[st])||0;
+        if(v>(mergedSets[sn].stageCounts[st]||0)) mergedSets[sn].stageCounts[st]=v;
+      });
+    });
+  });
+
+  const cur=events||{};
+  // (1) 누적 점수 이관 — 항상 같은 주소에 저장되므로 여러 기기가 해도 중복되지 않는다.
+  //     이미 저장된 값보다 클 때만 갱신한다(= 여러 기기 중 가장 온전한 기록이 남는다).
+  const oldLife=cur.legacy||null;
+  if(life>0 && (!oldLife || (Number(oldLife.pts)||0)<life)){
+    const ev={ts:1,pts:life,lt:true,wk:false,combo,sets:mergedSets,note:'v2 이관(누적)'};
+    cur.legacy=ev;
+    await fbPut(`/typingApp/events/${key}/legacy.json`, ev);
+  }
+  // (2) 이번 주 점수 이관 — 누적에는 이미 포함돼 있으므로 주간에만 반영한다.
+  const oldWeek=cur.legacyWeek||null;
+  if(week>0 && (!oldWeek || (Number(oldWeek.pts)||0)<week)){
+    const ev={ts:boundary,pts:week,lt:false,wk:true,note:'v2 이관(이번 주)'};
+    cur.legacyWeek=ev;
+    await fbPut(`/typingApp/events/${key}/legacyWeek.json`, ev);
+  }
+  // 마스코트 종류도 옮겨준다
+  const mtype=legacyCloud.mascot&&legacyCloud.mascot.type;
+  if(mtype && !(localPrefs(name)||{}).mascot){
+    saveLocalPrefs(name,{mascot:{type:mtype}});
+    await fbPut(`/typingApp/prefs/${key}.json`,{mascot:{type:mtype}});
+  }
+  localStorage.setItem('typingLegacyDone_'+name,'1');
+  return cur;
+}
+
+/* ── 서버에서 최신 상태를 받아 다시 계산 ── */
+async function refreshProgress(name){
+  if(!name) return emptyProgress();
+  const key=studentKey(name);
+  const [bRes,eRes,pRes]=await Promise.all([
+    fbGet(`/typingApp/base/${key}.json`),
+    fbGet(`/typingApp/events/${key}.json`),
+    fbGet(`/typingApp/prefs/${key}.json`)
+  ]);
+  let base=bRes.ok?(bRes.data||null):localBase(name);
+  if(bRes.ok) saveLocalBase(name,base);
+  if(pRes.ok && pRes.data) saveLocalPrefs(name,pRes.data);
+
+  // 이 기기의 기록(아직 못 올린 것 포함) + 서버 기록을 합친다.
+  // 같은 기록은 주소(id)가 같아서 두 번 더해지지 않는다.
+  let merged=Object.assign({},localEvents(name));
+  if(eRes.ok && eRes.data && typeof eRes.data==='object'){
+    Object.keys(eRes.data).forEach(k=>{ if(eRes.data[k]) merged[k]=eRes.data[k]; });
+  }
+  merged=await ensureLegacyImport(name,merged);
+  saveLocalEvents(name,merged);
+
+  const p=computeProgress(name,base,merged);
+  progressCache[name]=p;
+  updateSyncBadge();
+  return p;
+}
+async function loadProgressFromCloud(name){ return refreshProgress(name); }
+
+/* ── 전체 학생 점수(순위·관리자 기록) ── */
+async function loadAllProgress(){
+  const [bRes,eRes,pRes]=await Promise.all([
+    fbGet('/typingApp/base.json'),
+    fbGet('/typingApp/events.json'),
+    fbGet('/typingApp/prefs.json')
+  ]);
+  const bases=bRes.data||{}, evs=eRes.data||{}, prefs=pRes.data||{};
+  const pick=(obj,name)=>{
+    if(!obj) return null;
+    const cands=[studentKey(name),name,encodeURIComponent(name)];
+    for(const k of cands){ if(k && obj[k]) return obj[k]; }
+    for(const k of Object.keys(obj)){
+      let dec=k; try{ dec=decodeURIComponent(k); }catch(e){}
+      if(dec===name) return obj[k];
+    }
+    return null;
+  };
+  const out={};
+  students.forEach(name=>{
+    let events=pick(evs,name)||{};
+    // 이 기기에만 있는(아직 못 올린) 기록도 합쳐서, 방금 딴 점수가 순위에 바로 보이게 한다
+    if(name===currentStudent) events=Object.assign({},events,localEvents(name));
+    const prefsFor=pick(prefs,name);
+    if(prefsFor) saveLocalPrefs(name,prefsFor);
+    out[name]=computeProgress(name,pick(bases,name),events);
+  });
+  return out;
+}
+
+/* ══════════════════════════════════════
+   🙋 학생 명단
+══════════════════════════════════════ */
+let students=lsGet('typingStudents',[])||[];
+let currentStudent=localStorage.getItem('typingStudent')||null;
+
+// ★ 학생 명단도 통째로 덮어쓰지 않고, 서버 목록과 합친 뒤 저장한다.
+//   (한 기기가 옛 명단을 들고 저장해서 다른 기기가 추가한 학생을 지우는 사고 방지) ★
+async function saveStudents(removed){
+  lsSet('typingStudents',students);
+  const res=await fbGet('/typingApp/students.json');
+  let merged=students.slice();
+  if(res.ok && Array.isArray(res.data)){
+    res.data.forEach(n=>{ if(n && !merged.includes(n) && n!==removed) merged.push(n); });
+  }
+  students=merged;
+  lsSet('typingStudents',students);
+  await fbPut('/typingApp/students.json',students);
+}
+async function loadStudentsFromCloud(){
+  const res=await fbGet('/typingApp/students.json');
+  if(res.ok && Array.isArray(res.data) && res.data.length){
+    students=res.data.filter(Boolean);
+    lsSet('typingStudents',students);
+  }
 }
 function addStudent(){
   const inp=document.getElementById('adminStudentName');
@@ -1015,11 +1351,10 @@ function addStudent(){
 }
 function deleteStudent(i){
   if(!confirm(`"${students[i]}" 학생을 삭제할까요?`))return;
-  students.splice(i,1);saveStudents();renderAdminStudentList();
+  const removed=students[i];
+  students.splice(i,1);saveStudents(removed).then(renderAdminStudentList);
 }
-// ★ 버그 수정: 이름을 그냥 삭제 후 재등록하면 점수/배지/기록이 이전 이름 계정에 그대로 남아
-//   새 이름은 0점부터 시작하는 것처럼 보였다("이름 바꾸면 순위가 안 바뀜"). 이름은 저장 경로의
-//   키로 쓰이기 때문에, 이름을 바꿀 때는 기존 점수/배지/기록을 새 이름 쪽으로 그대로 옮겨준다. ★
+// 이름을 바꿀 때 점수/기록을 새 이름 쪽으로 그대로 옮긴다
 async function renameStudent(i){
   const oldName=students[i];
   const newName=prompt('새 이름을 입력하세요',oldName);
@@ -1030,25 +1365,27 @@ async function renameStudent(i){
   if(students.includes(trimmed)){alert('이미 등록된 이름이에요!');return;}
 
   showToast('🔄 이름을 바꾸는 중...');
-  // 1) 기존 점수/배지/기록을 새 이름으로 그대로 이관
-  const p=getProgress(oldName);
-  saveProgress(trimmed,p);
-  // 2) 기존 이름의 로컬/클라우드 기록은 정리
-  localStorage.removeItem('typingProgress_'+oldName);
+  await refreshProgress(oldName);
+  const oldKey=studentKey(oldName), newKey=studentKey(trimmed);
+  const evRes=await fbGet(`/typingApp/events/${oldKey}.json`);
+  const bRes=await fbGet(`/typingApp/base/${oldKey}.json`);
+  const events=Object.assign({},localEvents(oldName),evRes.data||{});
+  if(Object.keys(events).length) await fbPut(`/typingApp/events/${newKey}.json`,events);
+  if(bRes.data) await fbPut(`/typingApp/base/${newKey}.json`,bRes.data);
+  const prefs=localPrefs(oldName); if(prefs) await fbPut(`/typingApp/prefs/${newKey}.json`,prefs);
+  saveLocalEvents(trimmed,events); saveLocalBase(trimmed,bRes.data||null); if(prefs) saveLocalPrefs(trimmed,prefs);
+  localStorage.setItem('typingLegacyDone_'+trimmed,'1');
+  await fbPut(`/typingApp/events/${oldKey}.json`,null);
+  await fbPut(`/typingApp/base/${oldKey}.json`,null);
   delete progressCache[oldName];
-  if(firebaseReady){
-    const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-    fetch(`${FIREBASE_DB_URL}/typingApp/progress/${studentKey(oldName)}.json`,{method:'DELETE',signal:ctrl.signal})
-      .catch(e=>console.error('🔥 이전 이름 기록 정리 실패:',e)).finally(()=>clearTimeout(timer));
-  }
-  // 3) 명단 갱신
-  students[i]=trimmed;saveStudents();
-  // 4) 지금 선택되어 있는 학생이 이름을 바꾼 당사자라면 갱신
+
+  students[i]=trimmed;await saveStudents(oldName);
   if(currentStudent===oldName){
     currentStudent=trimmed;
     localStorage.setItem('typingStudent',trimmed);
-    updateStudentBar();
   }
+  await refreshProgress(trimmed);
+  updateStudentBar();
   renderAdminStudentList();
   renderAdminRecords();
   showToast(`✅ "${oldName}" → "${trimmed}" 로 이름을 바꿨어요 (점수·기록 그대로 유지)`);
@@ -1067,31 +1404,17 @@ function renderAdminStudentList(){
 }
 
 /* ══════════════════════════════════════
-   🏆 게이미피케이션 — 점수/콤보/배지/캐릭터 성장
+   🏆 점수/콤보 규칙
 ══════════════════════════════════════ */
 let sessionScore=0, combo=0, maxCombo=0, sessionCorrectTotal=0, sessionWrongTotal=0;
-let progressCache={};
 
-/* ★ 점수 규칙 ★
-   - 단계마다 점수를 바로 저장한다(중간에 그만둬도 이전 단계 점수는 남는다).
-   - 단계를 끝내면 완료 보너스를 준다.
-   - 같은 단계를 반복할수록 반복 보너스를 더 준다(2회차부터, 최대까지).
-   - 1~4단계를 연달아 했다고 해서 따로 주는 보너스는 없다. */
 const STAGE_CLEAR_BONUS=30;   // 단계 완료 보너스
 const REPEAT_BONUS_STEP=10;   // 반복 1회당 추가 보너스
 const REPEAT_BONUS_MAX=50;    // 반복 보너스 상한
-function getRepeatBonus(times){ // times = 이번이 몇 회차인지(1회차면 보너스 없음)
+function getRepeatBonus(times){
   if(times<=1) return 0;
   return Math.min((times-1)*REPEAT_BONUS_STEP, REPEAT_BONUS_MAX);
 }
-
-const BADGES=[
-  {id:'first_set',name:'첫 세트 완료',emoji:'🏅',check:p=>Object.keys(p.sets||{}).length>=1},
-  {id:'combo10',name:'콤보 10 달성',emoji:'🔥',check:p=>(p.maxCombo||0)>=10},
-  {id:'all4stage',name:'전체 4단계 클리어',emoji:'🌟',check:p=>!!p.completedAll4},
-  {id:'score500',name:'점수 500점 달성',emoji:'💎',check:p=>(p.totalScore||0)>=500},
-  {id:'sets5',name:'세트 5회 완료',emoji:'🏆',check:p=>Object.values(p.sets||{}).reduce((a,s)=>a+s.timesCompleted,0)>=5}
-];
 
 function registerCorrect(comboContinue){
   combo=comboContinue?combo+1:1;
@@ -1179,261 +1502,9 @@ function mascotSVG(type,size,uid){
   </svg>`;
 }
 
-function studentKey(name){ return encodeURIComponent(name).replace(/[.#$\[\]]/g,'_'); }
-function defaultProgress(){ return {totalScore:0,lifetimeScore:0,scoreEpoch:0,badges:[],sets:{},maxCombo:0,mascot:null,completedAll4:false}; }
-function getProgress(name){
-  if(!progressCache[name]){
-    progressCache[name]=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
-  }
-  return progressCache[name];
-}
-function saveProgress(name,p){
-  // ★★★ 버그 수정: 기준점(scoreEpoch)이 0인 옛 데이터가 초기화를 되돌리는 문제 ★★★
-  // 병합 규칙은 "기준점이 같으면 큰 값 우선"인데, 옛 버전이 저장한 기록은 기준점이 전부 0이라
-  // 초기화된 0점과 옛 360점이 동점 취급되어 360점이 이겨버렸다. 그래서 기기를 열 때마다
-  // 옛 점수가 되살아나 서로 덮어쓰는 상태가 됐다.
-  // 이제 저장할 때 기준점이 비어 있으면 "이번 주기"의 기준점을 반드시 찍어준다.
-  if(!p.scoreEpoch) p.scoreEpoch=getLastResetBoundary(new Date());
-  progressCache[name]=p;
-  localStorage.setItem('typingProgress_'+name,JSON.stringify(p));
-  if(!firebaseReady) return;
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  fetch(`${FIREBASE_DB_URL}/typingApp/progress/${studentKey(name)}.json`,{method:'PUT',body:JSON.stringify(p),signal:ctrl.signal})
-    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);})
-    .catch(e=>console.error('🔥 진행상황 저장 실패:',e))
-    .finally(()=>clearTimeout(timer));
-}
-// ★ 버그 수정: 단계를 끝내고 바로 클라우드에서 다시 불러오면, 방금 저장 요청이 서버에
-//   반영되기 전이라 "예전(더 적은) 기록"이 응답으로 올 수 있었다. 이걸 그대로 덮어써버려서
-//   막 딴 점수/완료 횟수가 순간적으로 0(또는 예전 값)으로 되돌아가 보이는 문제가 있었다.
-//   그래서 클라우드 값으로 무조건 덮어쓰지 않고, 이 기기가 이미 갖고 있는 더 높은/많은 값을
-//   보존하는 방식으로 병합한다. ★
-// ★★★ 추가 버그 수정 ★★★
-// 위의 "더 큰 값 우선" 규칙만 쓰면, 주간 초기화(또는 관리자의 점수 하향 수정)가
-// 한동안 안 켠 기기 때문에 되살아나는 문제가 있었다.
-// 예) 수요일에 A기기가 점수를 0으로 초기화 → 아직 안 켠 B기기에는 예전 500점이 남아 있음
-//     → B기기를 켜면 max(500, 0)=500이 되어 초기화가 통째로 취소되고 그 값이 다시 올라감.
-// 그래서 "점수 기준점(scoreEpoch)"을 함께 저장하고, 기준점이 더 최신인 쪽의 주간 점수를
-// 그대로 채택한다. 기준점이 같을 때만 예전처럼 더 큰 값을 신뢰한다.
-// (누적 점수 lifetimeScore는 초기화 대상이 아니므로 항상 더 큰 값을 유지한다.)
-function mergeProgress(local, cloud){
-  if(!local) return cloud;
-  if(!cloud) return local;
-  const lEpoch=local.scoreEpoch||0, cEpoch=cloud.scoreEpoch||0;
-  let totalScore, scoreEpoch;
-  if(lEpoch>cEpoch){ totalScore=local.totalScore||0; scoreEpoch=lEpoch; }
-  else if(cEpoch>lEpoch){ totalScore=cloud.totalScore||0; scoreEpoch=cEpoch; }
-  else { totalScore=Math.max(local.totalScore||0, cloud.totalScore||0); scoreEpoch=lEpoch; }
-  const merged={
-    totalScore,
-    scoreEpoch,
-    // ★ 누적 점수(주간 초기화의 영향을 받지 않는 총점) ★
-    // 기존 사용자는 lifetimeScore가 없을 수 있으므로 totalScore를 최소값으로 삼아 보정한다.
-    lifetimeScore: Math.max(local.lifetimeScore||local.totalScore||0, cloud.lifetimeScore||cloud.totalScore||0),
-    maxCombo: Math.max(local.maxCombo||0, cloud.maxCombo||0),
-    completedAll4: !!(local.completedAll4||cloud.completedAll4),
-    mascot: (local.mascot&&local.mascot.points>=((cloud.mascot&&cloud.mascot.points)||0)) ? local.mascot : (cloud.mascot||local.mascot),
-    badges: Array.from(new Set([...(local.badges||[]),...(cloud.badges||[])])),
-    sets: {}
-  };
-  const setNames=new Set([...Object.keys(local.sets||{}),...Object.keys(cloud.sets||{})]);
-  setNames.forEach(sn=>{
-    const l=(local.sets||{})[sn]||{timesCompleted:0,stageCounts:{}};
-    const c=(cloud.sets||{})[sn]||{timesCompleted:0,stageCounts:{}};
-    const stageCounts={};
-    [1,2,3,4].forEach(st=>{ stageCounts[st]=Math.max((l.stageCounts||{})[st]||0,(c.stageCounts||{})[st]||0); });
-    merged.sets[sn]={timesCompleted:Math.max(l.timesCompleted||0,c.timesCompleted||0), stageCounts};
-  });
-  return merged;
-}
-async function loadProgressFromCloud(name){
-  if(!firebaseReady) return;
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/progress/${studentKey(name)}.json`,{signal:ctrl.signal});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    if(data){
-      // ★★★ 버그 수정 ★★★
-      // 예전에는 progressCache(메모리)만 보고 병합했다. 그런데 페이지를 새로 열면 캐시가
-      // 비어 있어서, 이 기기에 저장돼 있던 기록(localStorage)이 통째로 무시되고 서버 값으로
-      // 덮어써졌다. 그 결과 화면에는 기기의 옛 점수가, 서버에는 낮은 점수가 남아
-      // "저장이 안 되는" 것처럼 보였다. 이제 localStorage까지 함께 병합한다.
-      const localSaved=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null');
-      const localData=mergeProgress(progressCache[name], localSaved);
-      const merged=mergeProgress(localData,data);
-      progressCache[name]=merged;
-      localStorage.setItem('typingProgress_'+name,JSON.stringify(merged));
-      // 병합 결과가 클라우드보다 더 온전하면(로컬이 더 최신이면) 클라우드도 갱신
-      if(JSON.stringify(merged)!==JSON.stringify(data)) saveProgress(name,merged);
-    }else{
-      // 서버에 기록이 없으면, 이 기기에 남아 있는 기록을 서버로 올려준다
-      const localSaved=JSON.parse(localStorage.getItem('typingProgress_'+name)||'null');
-      const localData=mergeProgress(progressCache[name], localSaved);
-      if(localData) saveProgress(name,localData);
-    }
-  }catch(e){console.error('🔥 진행상황 불러오기 실패:',e);}finally{clearTimeout(timer);}
-}
-async function loadAllProgressFromCloud(){
-  if(!firebaseReady) return {};
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/progress.json`,{signal:ctrl.signal});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    return data||{};
-  }catch(e){console.error('🔥 리더보드 불러오기 실패:',e);return {};}finally{clearTimeout(timer);}
-}
-/* ★★★ 순위가 안 보이던 원인 버그 수정 ★★★
-   저장할 때는 주소에 studentKey()로 인코딩해서 보내지만(예: %EC%A0%84%...),
-   Firebase가 주소를 자동으로 디코딩하기 때문에 서버에 실제로 만들어지는 키는
-   한글 원본("전소은")이다. 그런데 순위/기록 화면은 전체 데이터를 한 번에 받아온 뒤
-   인코딩된 키로 찾으려 해서 한글 이름은 항상 못 찾았고, 결국 클라우드 기록을 무시하고
-   그 태블릿의 로컬 기록만 보여줬다(=기기별로 따로 노는 것처럼 보임).
-   그래서 이름 → 데이터를 찾을 때 가능한 키 형태를 모두 시도한다. */
-function pickCloudProgress(cloud,name){
-  if(!cloud) return null;
-  const candidates=[name, studentKey(name), encodeURIComponent(name)];
-  for(const k of candidates){ if(k && cloud[k]) return cloud[k]; }
-  // 혹시 예전 방식으로 저장돼 인코딩된 키가 남아 있다면 디코딩해서 대조한다
-  for(const k of Object.keys(cloud)){
-    let dec=k;
-    try{ dec=decodeURIComponent(k); }catch(e){}
-    if(dec===name) return cloud[k];
-  }
-  return null;
-}
-
 /* ══════════════════════════════════════
-   ★ 매주 점수 초기화 — 한국시간(KST) 매주 수요일 오후 5시 30분 ★
-   배지/완료 기록은 그대로 두고, 점수(⭐)만 0으로 초기화한다.
-   여러 기기 중 아무 기기나 앱을 열었을 때 딱 한 번만 초기화가 일어나도록
-   "마지막 초기화 시각"을 클라우드에 저장해 두고 비교한다.
+   단계 완료 처리
 ══════════════════════════════════════ */
-function getLastResetBoundary(now){
-  const KST_OFFSET_MS = 9*60*60*1000;
-  const kst = new Date(now.getTime()+KST_OFFSET_MS); // UTC 메서드로 KST 벽시계 시각을 읽기 위한 트릭
-  const day = kst.getUTCDay(); // 0=일 ... 3=수
-  let diff = day-3;
-  if(diff<0) diff+=7;
-  const boundary = new Date(Date.UTC(kst.getUTCFullYear(),kst.getUTCMonth(),kst.getUTCDate(),17,30,0,0));
-  boundary.setUTCDate(boundary.getUTCDate()-diff);
-  if(boundary.getTime()>kst.getTime()) boundary.setUTCDate(boundary.getUTCDate()-7);
-  return boundary.getTime()-KST_OFFSET_MS; // 실제 UTC 타임스탬프(ms)로 환산
-}
-function parseResetMarker(v){
-  if(v==null) return 0;
-  if(typeof v==='object') return Number(v.boundary)||0; // claimWeeklyReset이 남긴 {boundary,token} 형태
-  return Number(v)||0; // 예전부터 쓰던 단순 숫자 형태(하위 호환)
-}
-function randomClaimToken(){ return Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); }
-async function checkWeeklyScoreReset(){
-  const boundary=getLastResetBoundary(new Date());
-  let lastReset=Number(localStorage.getItem('typingLastScoreReset')||0);
-  if(firebaseReady){
-    const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-    try{
-      const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{signal:ctrl.signal});
-      if(res.ok){ const cloudVal=await res.json(); const n=parseResetMarker(cloudVal); if(n) lastReset=Math.max(lastReset,n); }
-    }catch(e){console.error('🔥 점수 초기화 시각 확인 실패:',e);}
-    finally{clearTimeout(timer);}
-  }
-  // ★★★ 심각한 버그 수정 ★★★
-  // 이 기능을 처음 켠 시점에는 "마지막 초기화 시각" 기록이 아예 없어서 lastReset이 0으로
-  // 잡히는데, 그러면 "이번 주기는 아직 초기화 안 됐다"고 오판해서 기능이 켜지자마자
-  // 그동안 쌓아온 모든 학생의 점수를 즉시 0으로 밀어버리는 사고가 났었다(유다빈 학생 사례).
-  // 그래서 기록이 "한 번도 없던" 경우(=lastReset이 0)에는 점수를 건드리지 않고
-  // 지금 시점의 기준 시각만 저장해두고, 실제 초기화는 그 다음 수요일부터 적용되게 한다.
-  if(lastReset===0){
-    await recordResetBoundary(boundary);
-    return;
-  }
-  if(lastReset>=boundary) return; // 이번 주기는 이미 초기화됨
-  // ★★★★★ 심각한 버그 수정 (장소은 학생 사례) ★★★★★
-  // 예전에는 "초기화 완료" 표시를 전체 학생을 다 돌고 난 "맨 마지막"에 서버로 저장했다.
-  // 학교 와이파이 문제로 그 마지막 저장 한 번만 실패해도 서버에는 "아직 초기화 안 됨"이
-  // 그대로 남아서, 그 뒤로 아무 기기나(며칠 뒤라도!) 앱을 열 때마다 "초기화 안 됐네?" 하고
-  // 다시 초기화를 실행해버렸다. 그 사이(예: 목요일에) 학생이 새로 딴 점수까지 통째로
-  // 0으로 밀려나가는 사고가 이렇게 발생했다.
-  // 그래서 이제 "내가 이번 초기화를 맡는다"는 표시부터 먼저 남기고, 그 표시가 정말
-  // 내 것으로 확정됐는지 다시 읽어서 확인한 뒤에만 실제로 점수를 0으로 만든다.
-  // 거의 동시에 다른 기기도 시도했다면 마지막에 쓴 한 기기만 진행하고 나머지는 조용히
-  // 물러난다 — 여러 기기가 동시에 전체 학생 점수를 중복 초기화하는 사고도 함께 막는다.
-  const claimed=await claimWeeklyReset(boundary);
-  if(!claimed) return; // 표시 저장이 실패했거나 다른 기기가 먼저 가져갔다면 아무 것도 건드리지 않는다
-  await performWeeklyScoreReset(boundary);
-}
-async function claimWeeklyReset(boundary){
-  if(!firebaseReady) return false;
-  const myToken=randomClaimToken();
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify({boundary,token:myToken}),signal:ctrl.signal});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-  }catch(e){ console.error('🔥 초기화 담당 표시 저장 실패:',e); return false; }
-  finally{ clearTimeout(timer); }
-  // 거의 동시에 다른 기기가 썼을 수 있으니 잠깐 기다렸다가 다시 읽어서
-  // 최종적으로 남은 값이 정말 내 토큰인지 확인한다(Firebase는 나중에 쓴 값이 이긴다).
-  await new Promise(r=>setTimeout(r,300));
-  const ctrl2=new AbortController();const timer2=setTimeout(()=>ctrl2.abort(),8000);
-  try{
-    const res2=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{signal:ctrl2.signal});
-    if(!res2.ok) return false;
-    const v=await res2.json();
-    const ok=!!(v && typeof v==='object' && v.token===myToken && Number(v.boundary)>=boundary);
-    if(ok) localStorage.setItem('typingLastScoreReset',String(boundary));
-    return ok;
-  }catch(e){ return false; }
-  finally{ clearTimeout(timer2); }
-}
-async function recordResetBoundary(boundary){
-  localStorage.setItem('typingLastScoreReset',String(boundary));
-  if(!firebaseReady) return false;
-  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),8000);
-  try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/lastScoreReset.json`,{method:'PUT',body:JSON.stringify(boundary),signal:ctrl.signal});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    return true;
-  }catch(e){console.error('🔥 점수 초기화 시각 저장 실패:',e); return false;}
-  finally{clearTimeout(timer);}
-}
-async function performWeeklyScoreReset(boundary){
-  await loadStudentsFromCloud();
-  for(const name of students){
-    await loadProgressFromCloud(name); // 초기화 직전 다른 기기의 최신 기록까지 반영
-    const p=getProgress(name);
-    // ★ 누적 점수(lifetimeScore)는 절대 초기화하지 않는다. 주간 점수만 0으로 되돌린다. ★
-    if(p.lifetimeScore==null) p.lifetimeScore=p.totalScore||0;
-    p.totalScore=0;
-    p.scoreEpoch=boundary; // ★ 이 시점 이후 기준으로 점수를 다시 센다는 표시 ★
-    if(p.mascot) p.mascot.points=0;
-    progressCache[name]=p;
-    saveProgress(name,p);
-  }
-  await recordResetBoundary(boundary);
-}
-
-// ★ 단계를 개별로 진행해도 점수가 누적되도록, 점수/콤보 반영 로직을 공용 함수로 분리 ★
-function commitSessionScore(p){
-  p.totalScore=(p.totalScore||0)+sessionScore;
-  // ★ 누적 점수: 주간 초기화와 무관하게 계속 쌓이는 총점 ★
-  p.lifetimeScore=(p.lifetimeScore!=null?p.lifetimeScore:(p.totalScore-sessionScore))+sessionScore;
-  p.maxCombo=Math.max(p.maxCombo||0,maxCombo);
-  if(!p.mascot) p.mascot={type:Math.random()<0.5?'cat':'dog',points:0};
-  p.mascot.points=p.totalScore;
-  return p;
-}
-// ★ 1~4단계를 연달아 끝냈을 때 따로 점수를 몰아주던 finishSet()은 없앴다.
-//   이제 점수는 모든 경우에 "단계별"로만 지급된다. ★
-function awardBadges(p){
-  p.badges=p.badges||[];
-  const earned=[];
-  BADGES.forEach(b=>{ if(!p.badges.includes(b.id)&&b.check(p)){p.badges.push(b.id);earned.push(b);} });
-  return earned;
-}
-// ★ 단계 완료 화면 ★
-// 예전에는 저장 후 화면 점수가 0으로 보여서 "점수가 사라졌다"고 느껴졌다.
-// 이제 이번 단계에서 딴 점수의 내역과 함께, 저장된 "전체 점수"를 크게 보여준다.
 function showStageComplete(p,info){
   const {basePts,clearBonus,repeatBonus,earnedPts,times,newBadges}=info;
   document.getElementById('resultSub').textContent=`✅ ${currentSet.name} · ${currentStage}단계 완료!`;
@@ -1450,11 +1521,10 @@ function showStageComplete(p,info){
                     :`<div style="color:var(--muted);">🔁 다시 하면 반복 보너스를 받아요!</div>`);
   }
   const totalLine=document.getElementById('reTotalScore');
-  if(totalLine) totalLine.innerHTML=`⭐ 내 점수 <strong>${p.totalScore||0}점</strong> <span style="font-size:.8rem;color:var(--muted);">(누적 ${(p.lifetimeScore!=null?p.lifetimeScore:p.totalScore||0)}점)</span>`;
+  if(totalLine) totalLine.innerHTML=`⭐ 내 점수 <strong>${p.totalScore||0}점</strong> <span style="font-size:.8rem;color:var(--muted);">(누적 ${p.lifetimeScore||0}점)</span>`;
   const lvl=Math.floor((p.totalScore||0)/100)+1;
-  document.getElementById('reMascotLine').innerHTML=`${getMascotDef(p.mascot.type).emoji} 캐릭터 레벨 <strong>Lv.${lvl}</strong> (${'⭐'.repeat(Math.min(lvl,10))})`;
+  document.getElementById('reMascotLine').innerHTML=`${getMascotDef(p.mascot&&p.mascot.type).emoji} 캐릭터 레벨 <strong>Lv.${lvl}</strong> (${'⭐'.repeat(Math.min(lvl,10))})`;
   document.getElementById('reBadgesNew').innerHTML=newBadges.length?('🎉 새 배지 획득! '+newBadges.map(b=>`${b.emoji} ${b.name}`).join(' · ')):'';
-  // 다음 판을 위해 세션 값 초기화(화면에는 위에서 이미 확정된 값이 표시돼 있다)
   sessionScore=0;combo=0;maxCombo=0;sessionCorrectTotal=0;sessionWrongTotal=0;
   showPage('resultPage');
 }
@@ -1466,14 +1536,13 @@ function updateStudentBar(){
   const p=getProgress(currentStudent);
   const lvl=Math.floor((p.totalScore||0)/100)+1;
   const emoji=getMascotDef(p.mascot&&p.mascot.type).emoji;
-  el.innerHTML=`${emoji} <strong>${currentStudent}</strong> · Lv.${lvl} · ⭐${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개`;
+  el.innerHTML=`${emoji} <strong>${currentStudent}</strong> · Lv.${lvl} · ⭐${p.totalScore||0}점 · 🏅누적 ${p.lifetimeScore||0}점 · 🎖${(p.badges||[]).length}개`;
 }
 
 async function openBadgesPage(){
   if(!currentStudent){showToast('🙋 먼저 학생을 선택해 주세요!');showStudentPicker();return;}
   showPage('badgesPage');renderBadgesPage();
-  // ★ 다른 기기에서 딴 점수/배지가 바로 보이도록 클라우드에서 다시 불러와 새로고침 ★
-  await loadProgressFromCloud(currentStudent);
+  await refreshProgress(currentStudent);
   if(document.getElementById('badgesPage').classList.contains('active')){ renderBadgesPage(); updateStudentBar(); }
 }
 function renderBadgesPage(){
@@ -1484,7 +1553,7 @@ function renderBadgesPage(){
     `<div>${mascotSVG(type,90,'badgehome')}</div>`+
     `<div style="font-weight:900;font-size:1.2rem;color:var(--pk);">${currentStudent} · Lv.${lvl}</div>`+
     `<div style="color:var(--muted);font-weight:700;">⭐ 이번 주 ${p.totalScore||0}점 · ${'⭐'.repeat(Math.min(lvl,10))}</div>`+
-    `<div style="color:var(--lv);font-weight:800;font-size:.9rem;margin-top:2px;">🏅 누적 ${(p.lifetimeScore!=null?p.lifetimeScore:(p.totalScore||0))}점</div>`+
+    `<div style="color:var(--lv);font-weight:800;font-size:.9rem;margin-top:2px;">🏅 누적 ${p.lifetimeScore||0}점</div>`+
     `<div style="margin-top:8px;"><button class="btn btn-sm" style="background:var(--lv2);color:#5B3BA0;" onclick="openMascotPicker()">🔄 캐릭터 바꾸기</button></div>`;
   const grid=document.getElementById('badgeGrid');grid.innerHTML='';
   BADGES.forEach(b=>{
@@ -1509,16 +1578,18 @@ function openMascotPicker(){
 }
 function closeMascotPicker(){ document.getElementById('mascotPickerModal').classList.remove('show'); }
 function selectMascot(type){
-  const p=getProgress(currentStudent);
-  p.mascot=p.mascot||{type:'cat',points:p.totalScore||0};
-  p.mascot.type=type;
-  saveProgress(currentStudent,p);
+  const prefs=localPrefs(currentStudent)||{};
+  prefs.mascot={type};
+  saveLocalPrefs(currentStudent,prefs);
+  fbPut(`/typingApp/prefs/${studentKey(currentStudent)}.json`,prefs);
+  const p=getProgress(currentStudent); p.mascot={type};
   closeMascotPicker();
   renderBadgesPage();updateStudentBar();
   showToast('🐾 캐릭터가 바뀌었어요!');
 }
 
-let leaderboardMode='weekly'; // 'weekly' = 이번 주 순위, 'lifetime' = 누적 순위
+/* ── 순위 ── */
+let leaderboardMode='weekly';
 function setLeaderboardMode(mode){
   leaderboardMode=mode;
   document.getElementById('lbTabWeekly').classList.toggle('active',mode==='weekly');
@@ -1532,24 +1603,11 @@ async function openLeaderboard(){
   showPage('leaderboardPage');
   const list=document.getElementById('leaderboardList');
   list.innerHTML='<p style="color:var(--muted);font-weight:700;">불러오는 중...</p>';
-  const cloud=await loadAllProgressFromCloud();
+  await loadStudentsFromCloud();
+  const all=await loadAllProgress();
   const rows=students.map(name=>{
-    const cloudData=pickCloudProgress(cloud,name);
-    const localData=progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||null;
-    // ★ 버그 수정: 방금 이 기기에서 딴 점수가 클라우드에 반영되기 전(전송 중)에 순위를 열면
-    //   아직 예전 점수인 클라우드 값으로 덮어써져서 "점수가 안 바뀐 것처럼" 보이는 문제가 있었다.
-    //   점수는 항상 올라가기만 하므로, 클라우드/로컬 중 더 높은 값을 신뢰한다. ★
-    // ★ 주간 점수는 scoreEpoch(기준점)이 최신인 쪽을 신뢰해야 초기화가 되살아나지 않는다 ★
-    const cE=cloudData?.scoreEpoch||0, lE=localData?.scoreEpoch||0;
-    const score = cE>lE ? (cloudData?.totalScore||0)
-                : lE>cE ? (localData?.totalScore||0)
-                : Math.max(cloudData?.totalScore||0, localData?.totalScore||0);
-    const lifetime=Math.max(
-      cloudData?.lifetimeScore||cloudData?.totalScore||0,
-      localData?.lifetimeScore||localData?.totalScore||0
-    );
-    const badgeSrc=(cloudData?.badges?.length||0) >= (localData?.badges?.length||0) ? cloudData : localData;
-    return {name,score,lifetime,badges:(badgeSrc?.badges||[]).length};
+    const p=all[name]||emptyProgress();
+    return {name,score:p.totalScore||0,lifetime:p.lifetimeScore||0,badges:(p.badges||[]).length};
   }).sort((a,b)=> leaderboardMode==='lifetime' ? b.lifetime-a.lifetime : b.score-a.score);
   list.innerHTML='';
   if(!rows.length){list.innerHTML='<p style="color:var(--muted);font-weight:700;">등록된 학생이 없어요 🐾</p>';return;}
@@ -1619,7 +1677,7 @@ function getFirstJamo(ch){
 }
 
 /* ══════════════════════════════════════
-   ★ TTS — 설정 반영 버전 ★
+   ★ TTS ★
 ══════════════════════════════════════ */
 let speechVoice=null;
 function initVoice(){
@@ -1646,10 +1704,6 @@ function speakCurrentWord(){
   if(currentSet&&practiceQueue[currentIdx])speak(practiceQueue[currentIdx].text);
 }
 
-/* ★ 3번: 입력 중 반복 재생 ★
-   - 단어를 한 번 재생 후 설정된 간격마다 반복
-   - settings.repeatEnabled 가 false면 반복 없이 1회만
-*/
 function startRepeatSpeak(word){
   stopRepeatSpeak();
   if(!settings.soundEnabled)return;
@@ -1669,8 +1723,6 @@ function stopRepeatSpeak(){
 }
 
 /* ── 페이지 ── */
-// ★ 연습 화면 위에 "지금 누가 하고 있는지"를 크게 표시해서, 다른 친구 이름으로
-//   연습하다가 점수가 엉뚱한 사람에게 쌓이는 일을 막는다. ★
 function updateNowPlayingBars(){
   const html = currentStudent
     ? `<span class="npb-label">지금 연습 중</span> 🙋 ${currentStudent} <button class="npb-switch" onclick="showStudentPicker()">내가 아니에요 🔄</button>`
@@ -1695,7 +1747,7 @@ function renderHome(){
   updateStudentBar();
 }
 
-/* ── 연습 시작(학생 선택 → 4단계 진행) ── */
+/* ── 연습 시작 ── */
 let pendingSetIdx=null;
 let stageQueue=[], stageQueueIdx=0, currentStage=1;
 
@@ -1708,7 +1760,6 @@ function onWordSetClick(idx){
 function showStudentPicker(){
   showPage('studentPickPage');
   renderStudentPickGrid();
-  // ★ 다른 기기에서 추가한 학생도 바로 보이도록 매번 클라우드에서 최신 명단을 다시 불러온다 ★
   loadStudentsFromCloud().then(()=>{
     if(document.getElementById('studentPickPage').classList.contains('active')) renderStudentPickGrid();
   });
@@ -1724,7 +1775,6 @@ function renderStudentPickGrid(){
     grid.appendChild(card);
   });
 }
-// ★ 아이들이 다른 친구 이름으로 시작하는 실수를 막기 위해, 선택한 이름을 크게 보여주고 확인받는다 ★
 function selectStudent(name){
   const ok=confirm(`「 ${name} 」\n\n이 이름이 맞나요?\n확인을 누르면 ${name} 학생으로 시작해요!`);
   if(!ok) return;
@@ -1733,7 +1783,7 @@ function selectStudent(name){
 function applySelectedStudent(name){
   currentStudent=name;
   localStorage.setItem('typingStudent',name);
-  loadProgressFromCloud(name).then(()=>{
+  refreshProgress(name).then(()=>{
     updateStudentBar();
     if(pendingSetIdx!=null){const idx=pendingSetIdx;pendingSetIdx=null;beginStageFlow(idx);}
     else{goHome();}
@@ -1750,7 +1800,7 @@ function buildStageQueue(set){
   const stages=[1];
   if(set.lang==='en') stages.push(2);
   if(set.lang==='en') stages.push(3);
-  const hasMeanings=set.words.some(w=>w.meaning&&w.meaning.trim());
+  const hasMeanings=(set.words||[]).some(w=>w.meaning&&w.meaning.trim());
   if(set.lang==='en'&&hasMeanings) stages.push(4);
   return stages;
 }
@@ -1760,13 +1810,8 @@ const STAGE_INFO={
   3:{emoji:'🔡',name:'3단계',desc:'자음 가리고 쓰기'},
   4:{emoji:'🇰🇷',name:'4단계',desc:'뜻 보고 영어 쓰기'}
 };
-/* ══════════════════════════════════════
-   ★ 1번: 단계 선택 메뉴 — 자유롭게 원하는 단계로 진입 ★
-   ★ 2번: 단계별 완료 횟수를 동그란 배지로 표시 ★
-══════════════════════════════════════ */
 async function showStageMenu(){
-  // ★ 다른 기기에서 쌓은 점수/완료 횟수가 바로 보이도록 매번 클라우드에서 최신 기록을 다시 불러온다 ★
-  await loadProgressFromCloud(currentStudent);
+  await refreshProgress(currentStudent);
   const allStages=buildStageQueue(currentSet);
   document.getElementById('stageMenuTitle').textContent=`📚 ${currentSet.name} — 단계를 골라보세요!`;
   updateStudentBar();
@@ -1793,7 +1838,6 @@ function startSingleStage(stage){
   sessionScore=0;combo=0;maxCombo=0;sessionCorrectTotal=0;sessionWrongTotal=0;
   startStage(stage);
 }
-// ★ 결과 화면에서 바로 같은 단계를 한 번 더 — 반복할수록 보너스가 커진다 ★
 function repeatCurrentStage(){
   startSingleStage(currentStage);
 }
@@ -1809,7 +1853,6 @@ function startStage(stage){
     showPage('practicePage');
     renderKeyboard(currentSet.lang==='ko'?'ko':'en');
     document.getElementById('speakBtn').style.display=currentSet.lang==='ko'?'none':'inline-flex';
-    // ★ 7번: 단어 목록 보기는 1단계는 첫 학습이라 숨김 ★
     document.getElementById('wordListToggleWrapP').style.display='none';
     updateScoreUI();
     loadWord();
@@ -1819,44 +1862,47 @@ function startStage(stage){
   }
 }
 function onStage13Done(){ onStageFinished(); }
-// ★ 버그 수정(다른 기기 동기화): 점수를 저장하기 직전에 클라우드의 "최신" 기록을 다시 받아
-//   병합한 뒤에 이번 단계 점수를 더한다. 예전에는 이 단계를 시작할 때 캐시해둔 값 위에 그냥
-//   더해서 저장했기 때문에, 그 사이 다른 기기에서 올린 점수가 있으면 그걸 오래된 값으로
-//   덮어써서 "동기화가 안 되고 점수가 계산이 안 되는" 것처럼 보였다. ★
+
+/* ★★★ 단계 완료 — 이번 판의 기록만 따로 저장한다 ★★★
+   예전처럼 "내가 아는 전체 점수"를 통째로 덮어쓰지 않으므로,
+   다른 기기가 같은 시각에 저장해도 서로의 점수를 지우지 않는다. */
 async function onStageFinished(){
   stopRepeatSpeak();
-  if(currentStudent){ await loadProgressFromCloud(currentStudent); }
-  const p=getProgress(currentStudent);
-  p.sets=p.sets||{};
-  p.sets[currentSet.name]=p.sets[currentSet.name]||{timesCompleted:0,stageCounts:{}};
-  p.sets[currentSet.name].stageCounts=p.sets[currentSet.name].stageCounts||{};
-  const times=(p.sets[currentSet.name].stageCounts[currentStage]||0)+1;
-  p.sets[currentSet.name].stageCounts[currentStage]=times;
-
-  // ★ 단계별 점수 지급 ★
-  // 맞힌 점수 + 단계 완료 보너스 + 반복 보너스를 이 자리에서 바로 저장한다.
   const basePts=sessionScore;
   const clearBonus=STAGE_CLEAR_BONUS;
-  const repeatBonus=getRepeatBonus(times);
-  sessionScore=basePts+clearBonus+repeatBonus;
-  const earnedPts=sessionScore;
-  commitSessionScore(p);
+  const comboThisRound=maxCombo;
 
-  // ★ "세트 완료 횟수"는 이제 그 세트의 모든 단계를 각각 몇 바퀴 돌았는지로 센다.
-  //   (연달아 할 필요 없이, 단계별로 따로 해도 한 바퀴로 인정된다.)
-  const allStages=buildStageQueue(currentSet);
-  const counts=p.sets[currentSet.name].stageCounts;
-  p.sets[currentSet.name].timesCompleted=Math.min(...allStages.map(st=>counts[st]||0));
-  if(allStages.includes(4) && allStages.every(st=>(counts[st]||0)>0)) p.completedAll4=true;
-  const newBadges=awardBadges(p);
-  saveProgress(currentStudent,p);
+  // 반복 보너스를 계산하려면 지금까지 이 단계를 몇 번 했는지 알아야 한다 → 최신 상태를 먼저 받아온다
+  await refreshProgress(currentStudent);
+  const before=getProgress(currentStudent);
+  const beforeBadges=new Set(before.badges||[]);
+  const prevTimes=(((before.sets||{})[currentSet.name]||{}).stageCounts||{})[currentStage]||0;
+  const times=prevTimes+1;
+  const repeatBonus=getRepeatBonus(times);
+  const earnedPts=basePts+clearBonus+repeatBonus;
+
+  await pushEvent(currentStudent,{
+    ts:Date.now(),
+    pts:earnedPts,
+    stage:currentStage,
+    set:currentSet.name,
+    combo:comboThisRound
+  });
+
+  // 방금 기록을 포함해 다시 계산(인터넷이 끊겨 있어도 이 기기 기록으로 바로 반영된다)
+  const p=computeProgress(currentStudent, localBase(currentStudent), localEvents(currentStudent));
+  progressCache[currentStudent]=p;
+
+  const newBadges=BADGES.filter(b=>(p.badges||[]).includes(b.id)&&!beforeBadges.has(b.id));
   updateStudentBar();
   showStageComplete(p,{basePts,clearBonus,repeatBonus,earnedPts,times,newBadges});
+  // 결과 화면을 띄운 뒤 조용히 서버와 한 번 더 맞춘다
+  refreshProgress(currentStudent).then(()=>updateStudentBar());
 }
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 
 /* ══════════════════════════════════════
-   2/4단계 — 제출형(써넣기) 연습 엔진
+   2/3/4단계 — 제출형(써넣기) 연습 엔진
 ══════════════════════════════════════ */
 let submitQueue=[], submitIdx=0, submitWrongThisWord=false;
 function maskVowels(word){ return [...word].map(c=>/[aeiouAEIOU]/.test(c)?'_':c).join(''); }
@@ -1880,7 +1926,6 @@ function loadSubmitWord(){
   const promptEl=document.getElementById('submitPromptWord');
   const meaningEl=document.getElementById('submitMeaningHint');
   promptEl.textContent = currentStage===2 ? maskVowels(w.text) : currentStage===3 ? maskConsonants(w.text) : (w.meaning||'(뜻 없음)');
-  // ★ 5번: 2·3단계에서는 한글 뜻을 함께 보여주고, 발음을 반복 재생한다 ★
   if(currentStage===2||currentStage===3){
     if(w.meaning&&w.meaning.trim()){meaningEl.textContent='💜 '+w.meaning;meaningEl.style.display='block';}
     else{meaningEl.style.display='none';}
@@ -1913,7 +1958,6 @@ function submitAnswer(){
     stopRepeatSpeak();
     setTimeout(loadSubmitWord,700);
   }else{
-    // ★ 6번 버그 수정: 틀렸을 때 정답을 미리 보여주지 않는다 ★
     inpEl.className='wrong';
     fb.style.color='#EF4444';
     fb.textContent='❌ 아쉬워요! 다시 한 번 써 보세요';
@@ -1925,7 +1969,6 @@ function submitAnswer(){
 document.getElementById('submitInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();submitAnswer();}
 });
-/* ★ 8번: 입력에 집중하면 단어 목록 토글을 자동으로 접는다 ★ */
 document.getElementById('submitInput').addEventListener('focus',()=>{
   closeWordList('wordListBtnS','wordListPanelS');
 });
@@ -1944,11 +1987,10 @@ function loadWord(){
   document.getElementById('progressFill').style.width=(correctCount/currentSet.words.length*100)+'%';
   updateStats();
 
-  // 제시어 렌더
   const pw=document.getElementById('promptWord');pw.innerHTML='';
   [...text].forEach((ch,i)=>{
     const sp=document.createElement('span');sp.className='ch';
-    if(ch===' '){sp.classList.add('is-space');sp.textContent=' ';}
+    if(ch===' '){sp.classList.add('is-space');sp.textContent=' ';}
     else sp.textContent=ch;
     sp.dataset.idx=i;pw.appendChild(sp);
   });
@@ -1965,7 +2007,6 @@ function loadWord(){
 
   if(isEn){
     highlightKey(text[0]);
-    // ★ 3번: 영어 제시 시 반복 재생 시작 ★
     startRepeatSpeak(text);
   } else {
     highlightKey(getFirstJamo(text[0]));
@@ -1973,9 +2014,7 @@ function loadWord(){
 }
 
 /* ══════════════════════════════════════
-   ★ 7번/8번: 단어 목록 보기 토글 (2~4단계) ★
-   - 기본은 접힌 상태
-   - 입력창에 포커스가 가면 자동으로 접혀서 계속 열어두고 커닝하는 것을 막는다
+   단어 목록 보기 토글
 ══════════════════════════════════════ */
 function renderWordListPanel(panelId){
   const panel=document.getElementById(panelId);
@@ -2015,26 +2054,13 @@ function updateSpaceOverlay(typed){
 const inp=document.getElementById('typingInput');
 inp.addEventListener('compositionstart',()=>{isComposing=true;});
 inp.addEventListener('compositionend',()=>{isComposing=false;updateSpaceOverlay(inp.value);checkInput();});
-// ★ 버그 수정: 일부 태블릿/안드로이드 키보드에서 compositionend 이벤트가 제때 오지 않아
-//   isComposing이 계속 true로 남아있는 경우가 있었고, 그 동안은 input 이벤트를 무시해서
-//   "글자를 맞게 쳤는데도 가이드가 다음 글자로 넘어가지 않는" 문제가 생겼다.
-//   한글 조합 중에도 매번 checkInput을 실행하도록 바꿔서, 특정 키보드의 이벤트 오류에
-//   가이드가 멈추지 않도록 한다(조합 중 잠깐 틀림으로 표시됐다가 바로 정정되는 정도의
-//   부작용만 있고, 실제 채점/가이드는 항상 최신 입력 기준으로 정확히 갱신된다). ★
 inp.addEventListener('input',()=>{updateSpaceOverlay(inp.value);checkInput();});
 inp.addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();handleEnter();return;}
-  // ★ 뜻 팝업이 떠 있을 때는 스페이스바로도 다음 단계/다음 단어로 넘어갈 수 있게 한다.
-  //   (팝업이 없을 때는 스페이스가 단어 안의 띄어쓰기로 쓰이므로 그대로 입력되게 둔다)
   if(e.key===' ' && popupStep>0){e.preventDefault();handleEnter();}
 });
-/* ★ 8번: 입력에 집중하면 단어 목록 토글을 자동으로 접는다 ★ */
 inp.addEventListener('focus',()=>{ closeWordList('wordListBtnP','wordListPanelP'); });
 
-/* ══════════════════════════════════════
-   ★ 1번: 틀리면 입력창 초기화 후 같은 단어 재시도
-   ★ 3번: 영어 입력 중 반복 재생 (loadWord에서 startRepeatSpeak 호출)
-══════════════════════════════════════ */
 function checkInput(){
   if(!currentSet||currentIdx>=practiceQueue.length||popupStep>0)return;
   const word=practiceQueue[currentIdx].text;
@@ -2042,7 +2068,6 @@ function checkInput(){
   const isEn=currentSet.lang==='en';
   const chars=document.querySelectorAll('#promptWord .ch');
 
-  // 글자별 색상
   [...typed].forEach((ch,i)=>{
     if(i>=chars.length)return;
     chars[i].classList.remove('cur','done','wrong');
@@ -2053,10 +2078,6 @@ function checkInput(){
     if(i===typed.length)chars[i].classList.add('cur');
   }
 
-  // 키 하이라이트
-  // ★ 버그 수정: typed.length 기준이 아니라, 실제로 정답과 일치하는 부분까지의 길이를 기준으로
-  //   "다음에 쳐야 할 글자"를 계산한다. (오타를 낸 뒤에는 typed.length가 실제 위치보다 앞서가서
-  //   엉뚱한 글자를 미리 가이드해주는 오류가 있었음) ★
   let matchedLen=0;
   while(matchedLen<typed.length && matchedLen<word.length && typed[matchedLen]===word[matchedLen]) matchedLen++;
   const next=word[matchedLen];
@@ -2067,9 +2088,8 @@ function checkInput(){
   const ok=typed===word.substring(0,typed.length);
   inp.className=ok?(typed.length===word.length?'correct':''):'wrong';
 
-  // 정답 완성
   if(typed===word){
-    stopRepeatSpeak(); // 반복 중단
+    stopRepeatSpeak();
     correctCount++;
     registerCorrect(true);
     updateStats();
@@ -2081,9 +2101,6 @@ function checkInput(){
   }
 }
 
-/* ══════════════════════════════════════
-   ★ 1번: 엔터 처리 — 틀리면 같은 단어 즉시 재시도
-══════════════════════════════════════ */
 function handleEnter(){
   if(popupStep===1){showPopupStage2();return;}
   if(popupStep===2){popupEnterCount++;if(popupEnterCount>=2)closePopupAndNext();return;}
@@ -2093,31 +2110,25 @@ function handleEnter(){
   const word=practiceQueue[currentIdx]?.text;
 
   if(typed!==word){
-    // ★ 틀림: 카운트 증가, 입력창 초기화, 같은 단어 다시 표시 ★
     wrongTotalCount++;
     registerWrong();
     updateStats();
     isRetry=true;
 
-    // 입력창 흔들기 후 초기화
     inp.classList.add('wrong');
     setTimeout(()=>{
       inp.value='';
       inp.className='';
       updateSpaceOverlay('');
-      // 제시어 글자 색상 초기화 후 커서 첫 글자로
       const chars=document.querySelectorAll('#promptWord .ch');
       chars.forEach(c=>c.classList.remove('cur','done','wrong'));
       if(chars.length)chars[0].classList.add('cur');
-      // 첫 글자 키 다시 하이라이트
       const text=practiceQueue[currentIdx]?.text||'';
       const isEn=currentSet.lang==='en';
       if(isEn)highlightKey(text[0]);
       else highlightKey(getFirstJamo(text[0]));
-      // 재시도 배지
       document.getElementById('retryBadge').style.display='inline-block';
       inp.focus();
-      // 반복 재생 재시작 (영어일 경우)
       if(isEn) startRepeatSpeak(text);
     },350);
   }
@@ -2156,15 +2167,6 @@ function closePopupAndNext(){
 }
 function closePopup(){stopRepeatSpeak();document.getElementById('meaningPopup').classList.remove('show');popupStep=0;}
 
-/* ── 결과 ── */
-function showResult(){
-  stopRepeatSpeak();
-  document.getElementById('resultSub').textContent=`🌸 ${currentSet.name} 완료!`;
-  document.getElementById('reCorrect').textContent=correctCount;
-  document.getElementById('reWrong').textContent=wrongTotalCount;
-  document.getElementById('reTotal').textContent=currentSet.words.length;
-  showPage('resultPage');
-}
 function updateStats(){
   document.getElementById('statCorrect').textContent=correctCount;
   document.getElementById('statWrong').textContent=wrongTotalCount;
@@ -2175,10 +2177,6 @@ function updateStats(){
 let adminLang='ko';
 function openAdmin(){document.getElementById('adminPwInput').value='';document.getElementById('adminPwError').textContent='';document.getElementById('adminModal').classList.add('show');setTimeout(()=>document.getElementById('adminPwInput').focus(),100);}
 document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
-// ★ 버그 수정(다른 기기 동기화): 관리자 화면에 들어갈 때마다 클라우드의 최신 단어 세트/학생
-//   목록을 먼저 받아와 병합한다. 예전에는 앱을 처음 열었을 때 캐시해둔(오래됐을 수 있는) 목록을
-//   그대로 보여주고 편집했기 때문에, 다른 기기에서 방금 추가한 단어가 안 보이는 채로 저장을
-//   누르면 그 사이 다른 기기의 변경사항이 함께 덮어써지는 문제가 있었다. ★
 async function checkAdminPw(){
   if(document.getElementById('adminPwInput').value!==ADMIN_PW){
     document.getElementById('adminPwError').textContent='❌ 비밀번호가 틀렸습니다.';
@@ -2201,67 +2199,73 @@ async function renderAdminRecords(){
   if(!box) return;
   if(!students.length){box.innerHTML='<p style="color:var(--muted);font-weight:700;">등록된 학생이 없어요 🐾</p>';return;}
   box.innerHTML='<p style="color:var(--muted);font-weight:700;">불러오는 중...</p>';
-  const cloud=await loadAllProgressFromCloud();
+  const all=await loadAllProgress();
   box.innerHTML='';
   students.forEach(name=>{
     const key=studentKey(name);
-    const p=pickCloudProgress(cloud,name)||progressCache[name]||JSON.parse(localStorage.getItem('typingProgress_'+name)||'null')||defaultProgress();
+    const p=all[name]||emptyProgress();
     const lvl=Math.floor((p.totalScore||0)/100)+1;
     const setRows=Object.keys(p.sets||{}).map(sn=>{
       const s=p.sets[sn]||{};
       const counts=s.stageCounts||{};
       const stageStr=[1,2,3,4].map(st=>counts[st]?`${st}단계×${counts[st]}`:null).filter(Boolean).join(' · ')||'-';
-      return `<div style="font-size:.82rem;color:var(--ink);padding:2px 0;">📘 <strong>${sn}</strong> — 완료 ${s.timesCompleted||0}회 (${stageStr})</div>`;
+      return `<div style="font-size:.82rem;padding:2px 0;">📘 <strong>${sn}</strong> — 완료 ${s.timesCompleted||0}회 (${stageStr})</div>`;
     }).join('')||'<div style="font-size:.82rem;color:var(--muted);">아직 연습 기록이 없어요</div>';
     const wrap=document.createElement('div');
     wrap.style.cssText='background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:12px 14px;';
-    const life=(p.lifetimeScore!=null?p.lifetimeScore:(p.totalScore||0));
     wrap.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
         <span>🙋 ${name} · Lv.${lvl}</span>
-        <span style="color:var(--pk);text-align:right;">⭐이번 주 ${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개<br><span style="font-size:.78rem;color:var(--lv);">🏅 누적 ${life}점</span></span>
+        <span style="color:var(--pk);text-align:right;">⭐이번 주 ${p.totalScore||0}점 · 🎖${(p.badges||[]).length}개<br><span style="font-size:.78rem;color:var(--lv);">🏅 누적 ${p.lifetimeScore||0}점</span></span>
       </div>${setRows}
       <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;">
         <label style="font-size:.78rem;font-weight:800;color:var(--muted);">이번 주</label>
         <input type="number" id="scoreEdit_${key}" value="${p.totalScore||0}" style="width:88px;padding:5px 9px;border:2px solid var(--border);border-radius:9px;font-family:inherit;font-size:.85rem;">
         <label style="font-size:.78rem;font-weight:800;color:var(--muted);">누적</label>
-        <input type="number" id="lifeEdit_${key}" value="${life}" style="width:88px;padding:5px 9px;border:2px solid var(--border);border-radius:9px;font-family:inherit;font-size:.85rem;">
+        <input type="number" id="lifeEdit_${key}" value="${p.lifetimeScore||0}" style="width:88px;padding:5px 9px;border:2px solid var(--border);border-radius:9px;font-family:inherit;font-size:.85rem;">
         <button class="btn btn-sm" style="background:var(--pk);color:#fff;" onclick="manualSetScore('${name.replace(/'/g,"\\'")}','${key}')">✏️ 점수 수정</button>
       </div>`;
     box.appendChild(wrap);
   });
 }
-// ★ 자동 동기화/초기화 과정에서 점수가 잘못됐을 때 관리자가 직접 바로잡을 수 있는 기능 ★
+/* ★ 관리자가 점수를 직접 정할 때 ★
+   "이 시점의 확정 점수"를 base에 기록한다. 그 이전 기록은 계산에서 제외되므로
+   다른 기기의 옛 값이 되살아나 수정을 되돌리는 일이 없다. */
 async function manualSetScore(name,key){
   const val=Number(document.getElementById(`scoreEdit_${key}`).value);
   const lifeVal=Number(document.getElementById(`lifeEdit_${key}`).value);
   if(!Number.isFinite(val)||val<0||!Number.isFinite(lifeVal)||lifeVal<0){
     alert('0 이상의 숫자를 입력해 주세요!');return;
   }
-  // ★ 버그 예방: input 박스 값은 "관리자 패널을 열었던 그 순간" 값이라, 패널을 오래
-  //   켜둔 사이 학생이 실제로 더 쌓은 점수를 모른 채 그대로 덮어써버릴 수 있었다.
-  //   저장 직전에 서버 최신 값을 다시 받아와 입력값과 다르면 한 번 더 확인시킨다. ★
-  await loadProgressFromCloud(name);
-  const p=getProgress(name);
-  const liveWeekly=p.totalScore||0, liveLifetime=(p.lifetimeScore!=null?p.lifetimeScore:liveWeekly);
-  if(val!==liveWeekly||lifeVal!==liveLifetime){
+  // ★ 버그 수정: input 박스 값은 "관리자 패널을 열었던 그 순간"에 고정된 값이라
+  //   패널을 오래 켜둔 사이 학생이 실제로 더 쌓은 점수를 모른 채 그대로 덮어써서
+  //   되돌려버리는 사고가 있었다. 저장 직전에 반드시 서버 최신 값을 다시 받아와
+  //   입력값과 다르면 관리자에게 확인시킨 뒤에만 저장한다. ★
+  await refreshProgress(name);
+  const cur=getProgress(name);
+  const liveWeekly=cur.totalScore||0, liveLifetime=cur.lifetimeScore||0;
+  if((val!==liveWeekly||lifeVal!==liveLifetime)){
     const proceed=confirm(
-      `⚠️ 지금 서버에 저장된 최신 점수는\n이번 주 ${liveWeekly}점 · 누적 ${liveLifetime}점입니다.\n\n`+
+      `⚠️ 지금 서버에 저장된 최신 점수는\n`+
+      `이번 주 ${liveWeekly}점 · 누적 ${liveLifetime}점입니다.\n\n`+
       `입력하신 값(이번 주 ${val}점 · 누적 ${lifeVal}점)으로 덮어쓸까요?\n`+
       `(패널을 열어둔 사이 그동안 쌓인 점수가 있었다면 이 값으로 사라집니다)`
     );
     if(!proceed){ renderAdminRecords(); return; }
   }
-  p.totalScore=val;
-  p.lifetimeScore=lifeVal;
-  p.scoreEpoch=Date.now(); // ★ 수동 수정이 다른 기기의 예전 값에 덮어써지지 않도록 최신 기준점 부여 ★
-  if(!p.mascot) p.mascot={type:Math.random()<0.5?'cat':'dog',points:val};
-  p.mascot.points=val;
-  // ★ 수동 수정 결과가 mergeProgress의 "더 큰 값 우선" 규칙에 다시 덮어써지지 않도록,
-  //   이 기기의 캐시를 확정값으로 먼저 맞춘 뒤 저장한다. ★
-  progressCache[name]=p;
-  saveProgress(name,p);
+  const base={
+    ts:Date.now(),
+    lifetime:lifeVal,
+    weekly:val,
+    weeklyEpoch:getLastResetBoundary(new Date()),
+    maxCombo:cur.maxCombo||0,
+    sets:cur.sets||{}
+  };
+  const ok=await fbPut(`/typingApp/base/${studentKey(name)}.json`,base);
+  saveLocalBase(name,base);
+  progressCache[name]=computeProgress(name,base,localEvents(name));
   if(currentStudent===name) updateStudentBar();
-  showToast(`✏️ ${name} 학생 점수 수정 완료! (이번 주 ${val}점 · 누적 ${lifeVal}점)`);
+  showToast(ok?`✏️ ${name} 학생 점수 수정 완료! (이번 주 ${val}점 · 누적 ${lifeVal}점)`
+              :`⚠️ 인터넷 문제로 서버 저장에 실패했어요. 다시 시도해 주세요.`);
   renderAdminRecords();
 }
 function closeAdminModal(){document.getElementById('adminModal').classList.remove('show');}
@@ -2272,7 +2276,7 @@ function setAdminLang(lang,btn){
 }
 
 /* ══════════════════════════════════════
-   ★ 새 세트 추가 — 칸 단위 입력 (Enter: 아래로, Tab: 옆으로) ★
+   ★ 새 세트 추가 ★
 ══════════════════════════════════════ */
 function createNewWordRow(lang, idx){
   const row=document.createElement('div');row.className='new-word-row';
@@ -2338,10 +2342,13 @@ function addWordSet(){
     }).filter(w=>w.text);
   }
   if(!words.length){alert('단어를 입력하세요!');return;}
-  wordSets.push({name,lang:adminLang,words});saveWordSets();
+  const doc={id:newSetId(),name,lang:adminLang,words,order:wordSets.length};
+  wordSets.push(doc);
+  saveWordSetsLocal();
   document.getElementById('adminSetName').value='';
   resetNewWordGrids();
-  renderAdminList();showToast('🎉 세트가 추가되었어요!');
+  renderAdminList();
+  putSetDoc(doc).then(ok=>showToast(ok?'🎉 세트가 추가되었어요!':'⚠️ 저장 실패 — 인터넷 확인 후 다시 시도해 주세요'));
 }
 function renderAdminList(){
   const list=document.getElementById('adminSetList');list.innerHTML='';
@@ -2371,65 +2378,137 @@ function updateSetName(i,v){wordSets[i].name=v;}
 function updateWordField(si,wi,f,v){wordSets[si].words[wi][f]=v;}
 function deleteWord(si,wi){if(wordSets[si].words.length<=1){alert('최소 1개 이상!');return;}wordSets[si].words.splice(wi,1);renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${si}`);const a=document.getElementById(`editArrow${si}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);}
 function addWord(si){const isEn=wordSets[si].lang==='en';wordSets[si].words.push(isEn?{text:'',meaning:''}:{text:''});renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${si}`);const a=document.getElementById(`editArrow${si}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}const l=document.getElementById(`wordList${si}`);if(l){const ins=l.querySelectorAll('input');if(ins.length)ins[ins.length-(isEn?2:1)].focus();}},10);}
-function saveSet(i){wordSets[i].words=wordSets[i].words.filter(w=>w.text.trim());if(!wordSets[i].words.length){alert('단어 최소 1개!');return;}if(!wordSets[i].name.trim()){alert('세트 이름 입력!');return;}saveWordSets();renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${i}`);const a=document.getElementById(`editArrow${i}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);showToast('💾 저장되었어요!');}
-/* ★★★ 버그 수정: 삭제한 단어 세트가 되살아나는 문제 ★★★
-   단어 세트 병합은 "합집합" 방식이라, 어떤 기기가 예전 목록(삭제 전)을 갖고 있으면
-   그 기기가 앱을 여는 순간 삭제한 세트를 다시 서버로 올려버렸다.
-   그래서 "삭제한 세트 이름 목록"을 서버에 따로 남겨두고, 병합할 때 이 목록에 있는 이름은
-   항상 제외한다. */
-let deletedSetNames=JSON.parse(localStorage.getItem('typingDeletedSets')||'[]');
-function saveDeletedSetNames(){
-  localStorage.setItem('typingDeletedSets',JSON.stringify(deletedSetNames));
-  if(!firebaseReady) return;
-  fetch(`${FIREBASE_DB_URL}/typingApp/deletedSets.json`,{method:'PUT',body:JSON.stringify(deletedSetNames)})
-    .catch(e=>console.error('🔥 삭제 목록 저장 실패:',e));
+function saveSet(i){wordSets[i].words=wordSets[i].words.filter(w=>w.text.trim());if(!wordSets[i].words.length){alert('단어 최소 1개!');return;}if(!wordSets[i].name.trim()){alert('세트 이름 입력!');return;}saveWordSetsLocal();putSetDoc(wordSets[i]);renderAdminList();setTimeout(()=>{const p=document.getElementById(`editPanel${i}`);const a=document.getElementById(`editArrow${i}`);if(p){p.classList.add('open');if(a)a.textContent='▲';}},10);showToast('💾 저장되었어요!');}
+
+/* ══════════════════════════════════════════════════════════════════
+   📚 v3.0 — 단어 세트도 "세트 하나당 따로 저장"으로 바꿨다
+
+   [사라진 원인]
+   예전에는 목록 전체를 통째로 서버에 덮어썼다(PUT). 그래서 단어 세트가
+   하나도 없는 기기(새 태블릿·시크릿창)가 앱을 열면, 앱이 기본 세트 2개를
+   만들어 그대로 서버에 덮어써 버렸다 → 선생님이 만든 세트가 통째로 사라짐.
+
+   [고친 방식]
+   세트마다 주소가 따로 있어서 다른 기기의 세트를 지울 수 없다.
+   삭제는 "삭제 표시"만 남긴다. 그리고 서버 목록을 확인하기 전에는
+   기본 세트를 절대 만들지 않는다.
+══════════════════════════════════════════════════════════════════ */
+let deletedSetNames=lsGet('typingDeletedSets',[])||[];
+let cloudSetsLoaded=false;
+
+function newSetId(){ return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function legacySetId(name){ return 'n_'+studentKey(name); }
+function ensureSetId(s){ if(!s.id) s.id=legacySetId(s.name); return s.id; }
+function saveWordSetsLocal(){ lsSet('typingSets', wordSets); }
+
+async function putSetDoc(doc){
+  ensureSetId(doc);
+  doc.updatedAt=Date.now();
+  return await fbPut(`/typingApp/sets/${doc.id}.json`, doc);
 }
-async function loadDeletedSetNames(){
-  if(!firebaseReady) return;
-  try{
-    const res=await fetch(`${FIREBASE_DB_URL}/typingApp/deletedSets.json`);
-    if(!res.ok) return;
-    const data=await res.json();
-    if(Array.isArray(data)){
-      deletedSetNames=Array.from(new Set([...deletedSetNames,...data]));
-      localStorage.setItem('typingDeletedSets',JSON.stringify(deletedSetNames));
+function rebuildFromCloud(cloud){
+  const list=Object.keys(cloud||{})
+    .map(k=>Object.assign({},cloud[k],{id:(cloud[k]&&cloud[k].id)||k}))
+    .filter(s=>s&&s.name&&!s.deleted&&Array.isArray(s.words)&&s.words.length);
+  list.sort((a,b)=>((a.order==null?9999:a.order)-(b.order==null?9999:b.order)));
+  return list;
+}
+// 이 기기에만 남아 있는 세트를 서버로 되살린다(다른 세트는 건드리지 않는다)
+async function restoreLocalSets(cloud, force){
+  const seen=new Map();
+  [lsGet('typingSetsBackupV2',[])||[], lsGet('typingSets',[])||[], wordSets].forEach(list=>{
+    (list||[]).forEach(s=>{
+      if(!s||!s.name||!Array.isArray(s.words)||!s.words.length) return;
+      const prev=seen.get(s.name);
+      if(!prev||(s.words.length>prev.words.length)) seen.set(s.name,s);
+    });
+  });
+  let restored=0, order=100;
+  for(const s of seen.values()){
+    const id=s.id||legacySetId(s.name);
+    const existing=cloud[id]||Object.keys(cloud).map(k=>cloud[k]).find(c=>c&&c.name===s.name);
+    if(existing && !force){
+      if(existing.deleted) continue;                                  // 일부러 지운 세트는 되살리지 않는다
+      if((existing.words||[]).length>=s.words.length) continue;       // 서버 쪽이 더 온전하면 그대로 둔다
     }
-  }catch(e){console.error('🔥 삭제 목록 불러오기 실패:',e);}
+    if(!force && deletedSetNames.includes(s.name)) continue;
+    const doc={id:(existing&&existing.id)||id,name:s.name,lang:s.lang||'ko',words:s.words,
+               order:(s.order!=null?s.order:order++),updatedAt:Date.now()};
+    if(await putSetDoc(doc)){ cloud[doc.id]=doc; restored++; }
+  }
+  return restored;
 }
-function deleteSet(i){
-  if(!confirm(`"${wordSets[i].name}" 삭제할까요?`))return;
-  const nm=wordSets[i].name;
-  if(!deletedSetNames.includes(nm)) deletedSetNames.push(nm);
-  saveDeletedSetNames();
-  wordSets.splice(i,1);
-  saveWordSets();
+async function loadWordSetsFromCloud(){
+  // 처음 v3.0을 켤 때, 이 기기에 있던 세트 목록을 따로 백업해 둔다(복구용)
+  if(!localStorage.getItem('typingSetsBackupV2')){
+    const cur=lsGet('typingSets',[])||[];
+    if(cur.length) lsSet('typingSetsBackupV2',cur);
+  }
+  const res=await fbGet('/typingApp/sets.json');
+  if(!res.ok) return;   // 서버를 못 읽었으면 로컬 목록을 그대로 쓰고, 서버에는 아무것도 쓰지 않는다
+  const cloud=res.data||{};
+
+  // (1) 예전 방식(목록 통째 저장)에서 한 번만 옮겨오기
+  if(!Object.keys(cloud).length){
+    const legacy=await fbGet('/typingApp/wordSets.json');
+    if(Array.isArray(legacy.data)){
+      let i=0;
+      for(const s of legacy.data){
+        if(!s||!s.name||!Array.isArray(s.words)||!s.words.length) continue;
+        const doc={id:legacySetId(s.name),name:s.name,lang:s.lang||'ko',words:s.words,order:i++};
+        if(await putSetDoc(doc)) cloud[doc.id]=doc;
+      }
+    }
+    const del=await fbGet('/typingApp/deletedSets.json');
+    const names=Array.from(new Set([...(Array.isArray(del.data)?del.data:[]),...deletedSetNames]));
+    for(const nm of names){
+      const id=legacySetId(nm);
+      if(cloud[id]) continue;
+      const doc={id,name:nm,deleted:true};
+      if(await putSetDoc(doc)) cloud[id]=doc;
+    }
+  }
+
+  // (2) 이 기기에만 남아 있는 세트가 있으면 서버로 복구
+  await restoreLocalSets(cloud,false);
+
+  wordSets=rebuildFromCloud(cloud);
+  cloudSetsLoaded=true;
+  saveWordSetsLocal();
+  await ensureDefaultSets(cloud);
+}
+// 관리자용 강제 복구 버튼
+async function forceRestoreLocalSets(){
+  showToast('📤 이 기기의 단어 세트를 서버로 올리는 중...');
+  const res=await fbGet('/typingApp/sets.json');
+  if(!res.ok){ showToast('⚠️ 서버에 연결할 수 없어요. 인터넷을 확인해 주세요.'); return; }
+  const cloud=res.data||{};
+  const n=await restoreLocalSets(cloud,true);
+  wordSets=rebuildFromCloud(cloud);
+  saveWordSetsLocal();
   renderAdminList();
+  showToast(n?`✅ 세트 ${n}개를 서버에 복구했어요!`:'ℹ️ 이 기기에 서버로 올릴 세트가 없어요.');
 }
-function moveSet(i,dir){
+
+async function deleteSet(i){
+  const s=wordSets[i];
+  if(!confirm(`"${s.name}" 삭제할까요?`))return;
+  const id=ensureSetId(s);
+  if(!deletedSetNames.includes(s.name)){deletedSetNames.push(s.name);lsSet('typingDeletedSets',deletedSetNames);}
+  wordSets.splice(i,1);
+  saveWordSetsLocal();
+  renderAdminList();
+  await putSetDoc({id,name:s.name,deleted:true});
+}
+async function moveSet(i,dir){
   const j=i+dir;
   if(j<0||j>=wordSets.length)return;
   [wordSets[i],wordSets[j]]=[wordSets[j],wordSets[i]];
-  saveWordSets();
+  wordSets.forEach((s,k)=>{s.order=k;});
+  saveWordSetsLocal();
   renderAdminList();
-}
-function saveWordSets(){
-  // ★ 같은 이름으로 세트를 다시 만들면 삭제 목록에서 빼준다(다시 살릴 수 있게) ★
-  const present=new Set(wordSets.map(s=>s&&s.name).filter(Boolean));
-  const before=deletedSetNames.length;
-  deletedSetNames=deletedSetNames.filter(n=>!present.has(n));
-  if(deletedSetNames.length!==before) saveDeletedSetNames();
-  localStorage.setItem('typingSets',JSON.stringify(wordSets)); // 오프라인/실패 대비 임시 저장
-  if(!firebaseReady) return;
-  const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), 8000);
-  fetch(`${FIREBASE_DB_URL}/typingApp/wordSets.json`, {
-    method: 'PUT',
-    body: JSON.stringify(wordSets),
-    signal: ctrl.signal
-  })
-    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); })
-    .catch(e=>console.error('🔥 Firebase 저장 실패:', e))
-    .finally(()=>clearTimeout(timer));
+  await putSetDoc(wordSets[i]);
+  await putSetDoc(wordSets[j]);
 }
 
 function showToast(msg){
@@ -2438,71 +2517,31 @@ function showToast(msg){
   clearTimeout(t._t);t._t=setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.style.display='none',300);},1800);
 }
 
-// ★ 데이터 유실 방지: 클라우드 데이터로 무조건 덮어쓰지 않고, 세트 이름 기준으로 "더 온전한(단어 수가 많은) 쪽"을 살려 병합한다.
-//   기기마다 로컬 데이터가 다를 때(예: 한쪽엔 세트가 있고 다른 쪽엔 없을 때) 어느 쪽에서 열어도 데이터가 사라지지 않도록 하기 위함. ★
-function mergeWordSets(localList, cloudList){
-  const byName = new Map();
-  (cloudList||[]).forEach(s=>{ if(s&&s.name) byName.set(s.name, s); });
-  (localList||[]).forEach(s=>{
-    if(!s||!s.name) return;
-    const existing = byName.get(s.name);
-    if(!existing || (s.words||[]).length > (existing.words||[]).length){
-      byName.set(s.name, s);
-    }
-  });
-  // ★ 삭제된 세트는 어느 기기에 남아 있든 되살리지 않는다 ★
-  (deletedSetNames||[]).forEach(n=>byName.delete(n));
-  // 순서는 로컬 순서를 우선하고, 로컬에 없는(클라우드에만 있는) 세트는 뒤에 붙인다
-  const order=[];
-  (localList||[]).forEach(s=>{ if(s&&s.name&&byName.has(s.name)&&!order.includes(s.name)) order.push(s.name); });
-  (cloudList||[]).forEach(s=>{ if(s&&s.name&&byName.has(s.name)&&!order.includes(s.name)) order.push(s.name); });
-  return order.map(n=>byName.get(n));
-}
-async function loadWordSetsFromCloud(){
-  if(!firebaseReady) return;
-  await loadDeletedSetNames(); // ★ 삭제 목록을 먼저 받아와야 삭제된 세트가 안 살아난다 ★
-  const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), 8000);
-  try{
-    const res = await fetch(`${FIREBASE_DB_URL}/typingApp/wordSets.json`, {signal: ctrl.signal});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
-    if(Array.isArray(data) && data.length){
-      const merged = mergeWordSets(wordSets, data);
-      const changed = JSON.stringify(merged)!==JSON.stringify(data);
-      wordSets = merged;
-      localStorage.setItem('typingSets',JSON.stringify(wordSets));
-      // 병합 결과가 클라우드와 다르면(즉 로컬에만 있던 데이터를 되살렸다면) 클라우드도 최신 상태로 갱신
-      if(changed) saveWordSets();
-    }
-  }catch(e){
-    console.error('🔥 Firebase 불러오기 실패, 로컬 데이터를 사용합니다:', e);
-  }finally{
-    clearTimeout(timer);
+// ★ 서버 목록을 확인하기 전에는 절대 기본 세트를 만들지 않는다(세트가 사라지던 원인) ★
+async function ensureDefaultSets(cloud){
+  if(!cloudSetsLoaded) return;
+  if(wordSets.length) return;
+  const defaults=[
+    {name:'기본 영어 단어',lang:'en',words:[{text:'apple',meaning:'사과'},{text:'banana',meaning:'바나나'},{text:'cat',meaning:'고양이'},{text:'dog',meaning:'강아지'},{text:'school',meaning:'학교'},{text:'book',meaning:'책'}]},
+    {name:'기본 한글 단어',lang:'ko',words:[{text:'사과'},{text:'바나나'},{text:'고양이'},{text:'강아지'},{text:'학교'},{text:'책'}]}
+  ];
+  let i=0;
+  for(const s of defaults){
+    const id=legacySetId(s.name);
+    if(cloud&&cloud[id]) continue;                 // 선생님이 지운 기본 세트는 되살리지 않는다
+    const doc={id,name:s.name,lang:s.lang,words:s.words,order:i++};
+    if(await putSetDoc(doc)){ if(cloud) cloud[id]=doc; wordSets.push(doc); }
   }
+  saveWordSetsLocal();
 }
 
-function ensureDefaultSets(){
-  if(!wordSets.length){
-    wordSets=[
-      {name:'기본 영어 단어',lang:'en',words:[{text:'apple',meaning:'사과'},{text:'banana',meaning:'바나나'},{text:'cat',meaning:'고양이'},{text:'dog',meaning:'강아지'},{text:'school',meaning:'학교'},{text:'book',meaning:'책'}]},
-      {name:'기본 한글 단어',lang:'ko',words:[{text:'사과'},{text:'바나나'},{text:'고양이'},{text:'강아지'},{text:'학교'},{text:'책'}]}
-    ];
-    saveWordSets();
-  }
-}
-
-/* ★★★ 자동 업데이트 ★★★
-   탭을 계속 켜둔 기기에서 옛 코드가 남아 도는 문제를 막는다.
-   서버의 파일을 주기적으로 확인해서(캐시를 우회한 요청) 버전이 달라지면
-   저장이 꼬이기 전에 자동으로 새로고침한다. */
-const APP_VERSION='v2.2';
+/* ★★★ 자동 업데이트 ★★★ */
+const APP_VERSION='v3.1';
 let updateChecking=false;
 async function checkForUpdate(auto){
   if(updateChecking) return;
   updateChecking=true;
   try{
-    // 캐시를 우회하려고 매번 다른 주소로 요청한다
     const res=await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'});
     if(!res.ok) return;
     const text=await res.text();
@@ -2510,7 +2549,6 @@ async function checkForUpdate(auto){
     const serverVer=m&&m[1]?m[1].trim():null;
     if(serverVer && serverVer!==APP_VERSION){
       if(auto){
-        // 연습 도중에 갑자기 새로고침되면 점수를 잃을 수 있으니, 홈 화면일 때만 자동 적용
         const onHome=document.getElementById('homePage')?.classList.contains('active')
                   || document.getElementById('studentPickPage')?.classList.contains('active');
         if(!onHome) return;
@@ -2523,37 +2561,57 @@ async function checkForUpdate(auto){
   }catch(e){console.error('업데이트 확인 실패:',e);}
   finally{updateChecking=false;}
 }
+
+/* ★ 모든 기기가 같은 숫자·같은 단어 세트를 보도록 주기적으로 서버와 맞춘다 ★ */
+let syncTick=0;
+function setsFingerprint(){ return (wordSets||[]).map(s=>s.name+':'+(s.words||[]).length).join('|'); }
+async function autoSync(){
+  const onHome=document.getElementById('homePage').classList.contains('active');
+  const onQuietPage=onHome
+                 || document.getElementById('badgesPage').classList.contains('active')
+                 || document.getElementById('stageMenuPage').classList.contains('active');
+  if(!onQuietPage) return;   // 연습 중에는 화면을 건드리지 않는다
+  syncTick++;
+  // 1분마다 단어 세트도 확인 → 다른 기기(관리자)에서 만든 세트가 새로고침 없이 나타난다
+  if(onHome && syncTick%4===1){
+    const before=setsFingerprint();
+    await loadWordSetsFromCloud();
+    if(setsFingerprint()!==before && document.getElementById('homePage').classList.contains('active')){
+      renderHome();
+      showToast('📚 단어 세트가 새로 들어왔어요!');
+    }
+  }
+  if(!currentStudent) return;
+  await flushPendingEvents(false);
+  await refreshProgress(currentStudent);
+  updateStudentBar();
+  if(document.getElementById('badgesPage').classList.contains('active')) renderBadgesPage();
+}
+
 function init(){
-  // ★ 클라우드 응답을 기다리지 않고 로컬(캐시/기본값)로 즉시 첫 화면을 그려서
-  //   "홈을 눌러야만 목록이 보이는" 지연 현상을 없앤다.
-  ensureDefaultSets();
   renderKeyboard('en');
   renderHome();
+  updateSyncBadge();
 
-  // ★ 이후 Firebase에서 최신 데이터를 받아오면 홈 화면일 때만 다시 그려준다.
   loadWordSetsFromCloud().then(()=>{
-    ensureDefaultSets();
-    const homeIsActive=document.getElementById('homePage').classList.contains('active');
-    if(homeIsActive) renderHome();
+    if(document.getElementById('homePage').classList.contains('active')) renderHome();
+    if(document.getElementById('adminPage').classList.contains('active')) renderAdminList();
   });
   loadStudentsFromCloud().then(()=>{
     if(document.getElementById('homePage').classList.contains('active')) renderHome();
     if(document.getElementById('adminPage').classList.contains('active')) renderAdminStudentList();
   });
   if(currentStudent){
-    loadProgressFromCloud(currentStudent).then(()=>{
+    refreshProgress(currentStudent).then(()=>{
       if(document.getElementById('homePage').classList.contains('active')) updateStudentBar();
     });
   }
-  // ★ 매주 수요일 17:30(KST) 점수 초기화 여부 확인 (기한이 지났으면 자동 초기화) ★
-  checkWeeklyScoreReset().then(()=>{
-    if(currentStudent && document.getElementById('homePage').classList.contains('active')) updateStudentBar();
-  });
+  flushPendingEvents(false);
 
-  // ★ 자동 업데이트: 10분마다, 그리고 태블릿을 다시 켜거나 화면으로 돌아올 때마다 확인 ★
+  setInterval(autoSync, 15*1000);
   setInterval(()=>checkForUpdate(true), 10*60*1000);
-  window.addEventListener('focus',()=>checkForUpdate(true));
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkForUpdate(true); });
+  window.addEventListener('focus',()=>{checkForUpdate(true);autoSync();});
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden){checkForUpdate(true);autoSync();} });
 }
 init();
 </script>
