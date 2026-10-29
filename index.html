@@ -301,7 +301,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 #syncBadge{position:fixed;right:6px;bottom:30px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;display:none;}
 #syncBadge.warn{background:#E85D5D;display:block;}
 
-/* ── ☔ 단어 비 게임 ── */
+/* ── 🎮 Game 1·2 (빗방울 타자 게임) ── */
 .stage-btn.game-btn{background:linear-gradient(135deg,#EAF4FF 0%,#FDEBF5 100%);border-color:#BFD5F2;}
 .stage-btn.game-btn:hover{border-color:#8FB3E8;}
 .stage-section-label{grid-column:1/-1;font-size:.9rem;font-weight:900;color:#5B7FB8;margin-top:6px;}
@@ -322,6 +322,8 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 .rdrop .en{font-size:1.4rem;font-weight:900;letter-spacing:3px;color:#5B3BA0;margin-top:2px;}
 .rdrop .en .bl{color:var(--pk);border-bottom:3px solid var(--pk);padding:0 2px;margin:0 1px;}
 .rdrop .en .bl.fill{color:#22C55E;border-color:#22C55E;}
+.rdrop .en .sym{color:#E0668A;font-weight:900;padding:0 1px;}
+.rdrop .en .sp{display:inline-block;width:.8em;}
 .rdrop .typed{font-size:1rem;font-weight:900;letter-spacing:2px;min-height:1.1em;color:#22C55E;}
 .rdrop.target{border-color:var(--pk);box-shadow:0 0 0 4px rgba(255,143,171,.3),0 5px 0 rgba(255,143,171,.4);}
 .rdrop.target::before{border-color:var(--pk);}
@@ -425,7 +427,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
 
 <!-- ══ 홈 ══ -->
 <!-- ★ 버전 표시 — 태블릿이 최신 버전인지 한눈에 확인용 ★ -->
-<div id="versionBadge" onclick="checkForUpdate(false)" title="눌러서 업데이트 확인" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;">v3.2</div>
+<div id="versionBadge" onclick="checkForUpdate(false)" title="눌러서 업데이트 확인" style="position:fixed;right:6px;bottom:6px;z-index:9999;background:rgba(0,0,0,.55);color:#fff;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:10px;cursor:pointer;">v3.3</div>
 <div id="syncBadge" onclick="flushPendingEvents(true)" title="눌러서 다시 저장 시도"></div>
 
 <div id="homePage" class="page active">
@@ -596,7 +598,7 @@ input:checked+.toggle-slider::before{transform:translateX(24px);}
   </div>
 </div>
 
-<!-- ══ ☔ 단어 비 게임 ══ -->
+<!-- ══ 🎮 Game 1·2 (빗방울 타자 게임) ══ -->
 <div id="rainGamePage" class="page">
   <div class="now-playing-bar" id="nowPlayingR"></div>
   <div class="card" style="padding:11px 16px;">
@@ -1901,15 +1903,15 @@ const STAGE_INFO={
   2:{emoji:'🔤',name:'2단계',desc:'모음 가리고 쓰기'},
   3:{emoji:'🔡',name:'3단계',desc:'자음 가리고 쓰기'},
   4:{emoji:'🇰🇷',name:'4단계',desc:'뜻 보고 영어 쓰기'},
-  5:{emoji:'🌦️',name:'단어 비 1',desc:'모음만 쳐서 빗방울 터뜨리기',game:true},
-  6:{emoji:'🌧️',name:'단어 비 2',desc:'한글 보고 영어 전체 쓰기',game:true}
+  5:{emoji:'🌦️',name:'Game 1',desc:'모음 빈칸 보고 단어 전체 쓰기',game:true},
+  6:{emoji:'🌧️',name:'Game 2',desc:'한글 보고 영어 전체 쓰기',game:true}
 };
 function stageLabel(st){ return (STAGE_INFO[st]&&STAGE_INFO[st].game)?STAGE_INFO[st].name:`${st}단계`; }
 // ★ 게임은 배지(🌟 전체 4단계, 🏆 세트 완료) 계산에는 넣지 않는다 — buildStageQueue와 따로 둔다 ★
 function buildGameStages(set){
   if(set.lang!=='en') return [];
   const out=[];
-  if((set.words||[]).some(w=>/[aeiou]/i.test(w.text||''))) out.push(5);
+  if((set.words||[]).some(w=>w.text&&w.text.trim())) out.push(5);
   if((set.words||[]).some(w=>w.meaning&&w.meaning.trim())) out.push(6);
   return out;
 }
@@ -1936,7 +1938,7 @@ async function showStageMenu(){
   });
   const games=buildGameStages(currentSet);
   if(games.length){
-    const lab=document.createElement('div');lab.className='stage-section-label';lab.textContent='☔ 단어 비 게임 (점수는 저장되지 않아요)';
+    const lab=document.createElement('div');lab.className='stage-section-label';lab.textContent='🎮 게임 (점수는 저장되지 않아요)';
     grid.appendChild(lab);
     games.forEach(stage=>{
       const info=STAGE_INFO[stage];
@@ -2643,9 +2645,10 @@ async function ensureDefaultSets(cloud){
 
 
 /* ══════════════════════════════════════════════════════════════════
-   ☔ 단어 비 게임 (v3.2)
-   - 단어 비 1(stage 5): 한글 뜻 + 모음이 빈칸인 단어(h_lp) → 모음만 순서대로 친다 (e)
-   - 단어 비 2(stage 6): 한글 뜻만 보고 영어 단어 전체를 친다 (help)
+   🎮 Game 1·2 — 빗방울 타자 게임 (v3.3)
+   - Game 1(stage 5): 한글 뜻 + 모음만 빈칸인 단어(h_lp) → 단어 전체를 친다 (help)
+   - Game 2(stage 6): 한글 뜻만 보고 영어 단어 전체를 친다 (help)
+   - 두 게임 모두 알파벳이 아닌 기호(' - . ? ! 띄어쓰기 등)는 빗방울에 보여주고, 입력은 학생이 직접 한다
    - 1학년용: 기본 "아주 천천히"(바닥까지 약 20초, 화면에 최대 2개)
    - 바닥에 닿으면 우산 1개 감소(5개). 점수는 저장하지 않고 한 판 끝날 때 화면에만 보여준다.
 ══════════════════════════════════════════════════════════════════ */
@@ -2659,8 +2662,18 @@ const RAIN_VOW=/[aeiou]/i;
 let rainSpeed=Number(localStorage.getItem('typingRainSpeed')||0)||0;
 let rain={running:false,paused:false,queue:[],drops:[],hearts:RAIN_HEARTS,missed:[],cleared:0,total:0,last:0,spawnT:0,raf:0,timer:null};
 
-function rainAnswer(text){
-  return currentStage===5 ? [...text].filter(c=>RAIN_VOW.test(c)).join('').toLowerCase() : text.trim().toLowerCase();
+function rainNorm(t){ return String(t||'').replace(/[\u2018\u2019\u02BC`´]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/\s+/g,' ').toLowerCase(); }
+function rainAnswer(text){ return rainNorm(text.trim()); }
+// 빗방울에 보여줄 글자: Game 1은 모음만 빈칸, Game 2는 알파벳 전부 빈칸 — 기호와 띄어쓰기는 그대로 보여준다
+function rainPattern(text,stage){
+  return [...text].map(c=>{
+    if(c===' ') return '<span class="sp"></span>';
+    if(/[a-z]/i.test(c)){
+      if(stage===6 || RAIN_VOW.test(c)) return '<span class="bl">_</span>';
+      return escHtml(c);
+    }
+    return `<span class="sym">${escHtml(c)}</span>`;
+  }).join('');
 }
 function stopRainGame(){
   rain.running=false;rain.paused=false;
@@ -2676,15 +2689,16 @@ function hideRainOv(){document.getElementById('rainOv').classList.add('hide');}
 function startRainGame(stage){
   stopRainGame();
   currentStage=stage;
-  const words=(currentSet.words||[]).filter(w=>w.text&&w.text.trim()).filter(w=>stage===5?RAIN_VOW.test(w.text):(w.meaning&&w.meaning.trim()));
+  const words=(currentSet.words||[]).filter(w=>w.text&&w.text.trim()).filter(w=>stage===5||(w.meaning&&w.meaning.trim()));
   rain.queue=shuffle(words.map(w=>({text:w.text.trim(),meaning:(w.meaning||'').trim()})));
   rain.total=rain.queue.length;rain.cleared=0;rain.hearts=RAIN_HEARTS;rain.missed=[];
   document.getElementById('rainLvTag').textContent=`${currentSet.name} · ${STAGE_INFO[stage].name}`;
   showPage('rainGamePage');
   updateScoreUI();updateRainHud();
-  const how=stage===5?'빈칸에 들어갈 <strong>모음만</strong> 순서대로 쳐요!<br>예) 돕다 h_lp → <strong>e</strong>'
-                     :'한글 뜻을 보고 <strong>영어 단어</strong>를 쳐요!<br>예) 돕다 → <strong>help</strong>';
-  showRainOv(`<div style="font-size:2.6rem">${STAGE_INFO[stage].emoji}</div><h2>${STAGE_INFO[stage].name}</h2><p>${how}</p>
+  const how=stage===5?'모음이 빈칸인 단어를 보고 <strong>단어 전체</strong>를 쳐요!<br>예) 돕다 h_lp → <strong>help</strong>'
+                     :'한글 뜻을 보고 <strong>영어 단어 전체</strong>를 쳐요!<br>예) 돕다 → <strong>help</strong>';
+  const symNote='<br><span style="font-size:.85rem;">\' - ? 같은 기호와 띄어쓰기도 직접 쳐야 해요</span>';
+  showRainOv(`<div style="font-size:2.6rem">${STAGE_INFO[stage].emoji}</div><h2>${STAGE_INFO[stage].name}</h2><p>${how}${symNote}</p>
     <div class="rain-speed">${RAIN_SPEEDS.map((s,i)=>`<button type="button" class="${i===rainSpeed?'sel':''}" onclick="pickRainSpeed(${i})">${s.emoji} ${s.name}<small>바닥까지 ${s.hint}</small></button>`).join('')}</div>
     <button class="btn btn-primary" style="font-size:1.1rem;padding:12px 30px;" onclick="rainCountdown()">☔ 시작!</button>`);
 }
@@ -2723,7 +2737,9 @@ function rainSpawn(){
   const {lane,x}=rainLane();
   const el=document.createElement('div');el.className='rdrop';el.style.left=x+'%';el.style.top='-90px';
   const ko=w.meaning?`<div class="ko">${escHtml(w.meaning)}</div>`:'';
-  const en=currentStage===5?`<div class="en">${[...w.text].map(c=>RAIN_VOW.test(c)?'<span class="bl">_</span>':escHtml(c)).join('')}</div>`:'';
+  // Game 2는 기호나 띄어쓰기가 있는 단어만 빈칸 모양을 보여준다(알파벳은 전부 빈칸이라 정답이 드러나지 않음)
+  const hasSym=/[^a-z]/i.test(w.text.trim());
+  const en=(currentStage===5||hasSym)?`<div class="en">${rainPattern(w.text.trim(),currentStage)}</div>`:'';
   el.innerHTML=`${ko}${en}<div class="typed"></div>`;
   document.getElementById('rainSky').appendChild(el);
   rain.drops.push({w,el,lane,y:-90,ans:rainAnswer(w.text),alive:true});
@@ -2779,25 +2795,21 @@ function updateRainHud(){
 }
 function rainLowest(t){return rain.drops.filter(d=>d.alive&&d.ans.startsWith(t)).sort((a,b)=>b.y-a.y)[0]||null;}
 function rainPaint(){
-  const t=document.getElementById('rainInput').value.trim().toLowerCase();
+  const t=rainNorm(document.getElementById('rainInput').value.replace(/^\s+/,''));
   const low=t?rainLowest(t):null;
   rain.drops.forEach(d=>{
     if(!d.alive)return;
     const on=!!t&&d.ans.startsWith(t);
     d.el.classList.toggle('target',on&&d===low);
-    if(currentStage===5){
-      d.el.querySelectorAll('.bl').forEach((bl,i)=>{const f=on&&i<t.length;bl.textContent=f?t[i]:'_';bl.classList.toggle('fill',f);});
-    }else{
-      d.el.querySelector('.typed').textContent=on?d.ans.slice(0,t.length):'';
-    }
+    d.el.querySelector('.typed').textContent=on?d.w.text.trim().slice(0,t.length):'';
   });
 }
 (function(){
   const el=document.getElementById('rainInput');
   el.addEventListener('input',()=>{
     if(!rain.running||rain.paused)return;
-    const t=el.value.trim().toLowerCase();
-    if(!t){rainPaint();return;}
+    const t=rainNorm(el.value.replace(/^\s+/,''));
+    if(!t.trim()){rainPaint();return;}
     const exact=rain.drops.filter(d=>d.alive&&d.ans===t).sort((a,b)=>b.y-a.y)[0];
     if(exact){rainHit(exact);el.value='';rainPaint();return;}
     if(!rainLowest(t)){
@@ -2844,7 +2856,7 @@ function rainFinish(win){
 }
 
 /* ★★★ 자동 업데이트 ★★★ */
-const APP_VERSION='v3.2';
+const APP_VERSION='v3.3';
 let updateChecking=false;
 async function checkForUpdate(auto){
   if(updateChecking) return;
